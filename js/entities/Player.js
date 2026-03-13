@@ -237,6 +237,11 @@ class Player {
         result = this.activateTornado();
         this.abilityCooldowns[key] = 20.0;
         break;
+        
+      case 'EARTHQUAKE':
+        result = this.activateEarthquake();
+        this.abilityCooldowns[key] = 15.0;
+        break;
     }
     
     return result;
@@ -312,6 +317,13 @@ class Player {
     };
     
     return { type: 'TORNADO', projectile };
+  }
+  
+  /**
+   * Activates Earthquake ability
+   */
+  activateEarthquake() {
+    return { type: 'EARTHQUAKE', stunDuration: 3000 }; // 3 seconds stun
   }
   
   /**

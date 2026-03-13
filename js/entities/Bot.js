@@ -26,6 +26,10 @@ class Bot {
     this.contactDamage = 10; // Takes 15 hits to kill player (150 HP / 10 damage)
     this.coinReward = 10; // Fixed 10 coins per bot
     
+    // Status effects
+    this.stunned = false;
+    this.stunEndTime = 0;
+    
     // Physics
     this.velocityX = 0;
     this.velocityY = 0;
@@ -40,12 +44,22 @@ class Bot {
    * @param {Island} island - The island platform
    */
   update(deltaTime, playerPos, island) {
-    // AI: Move toward player
-    const dx = playerPos.x - this.x;
+    // Check if stun has expired
+    if (this.stunned && Date.now() >= this.stunEndTime) {
+      this.stunned = false;
+    }
     
-    if (Math.abs(dx) > 5) {
-      this.velocityX = dx > 0 ? this.speed : -this.speed;
+    // AI: Move toward player (only if not stunned)
+    if (!this.stunned) {
+      const dx = playerPos.x - this.x;
+      
+      if (Math.abs(dx) > 5) {
+        this.velocityX = dx > 0 ? this.speed : -this.speed;
+      } else {
+        this.velocityX = 0;
+      }
     } else {
+      // Stunned - no movement
       this.velocityX = 0;
     }
     
@@ -78,6 +92,15 @@ class Bot {
   }
   
   /**
+   * Stuns the bot for a duration
+   * @param {number} duration - Stun duration in milliseconds
+   */
+  stun(duration) {
+    this.stunned = true;
+    this.stunEndTime = Date.now() + duration;
+  }
+  
+  /**
    * Applies damage to the bot
    * @param {number} amount - Damage amount
    * @returns {boolean} True if bot was defeated
@@ -98,15 +121,42 @@ class Bot {
   render(ctx) {
     ctx.imageSmoothingEnabled = false;
     
-    // Draw bot body (red)
-    ctx.fillStyle = '#DC143C';
+    // Draw bot body (red, or gray if stunned)
+    ctx.fillStyle = this.stunned ? '#808080' : '#DC143C';
     ctx.fillRect(this.x, this.y, this.width, this.height);
     
-    // Draw eyes (yellow)
-    ctx.fillStyle = '#FFD700';
+    // Draw eyes (yellow, or white if stunned)
+    ctx.fillStyle = this.stunned ? '#FFFFFF' : '#FFD700';
     const eyeSize = Math.max(3, this.size / 8);
     ctx.fillRect(this.x + this.width * 0.25, this.y + this.height * 0.3, eyeSize, eyeSize);
     ctx.fillRect(this.x + this.width * 0.65, this.y + this.height * 0.3, eyeSize, eyeSize);
+    
+    // Draw stun stars if stunned
+    if (this.stunned) {
+      const time = Date.now() / 200;
+      for (let i = 0; i < 3; i++) {
+        const angle = (time + i * 120) * Math.PI / 180;
+        const radius = this.width * 0.6;
+        const sx = this.x + this.width / 2 + Math.cos(angle) * radius;
+        const sy = this.y - 10 + Math.sin(angle) * 10;
+        
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        for (let j = 0; j < 5; j++) {
+          const starAngle = (j * 4 * Math.PI) / 5 - Math.PI / 2;
+          const starRadius = j % 2 === 0 ? 5 : 2.5;
+          const x = sx + Math.cos(starAngle) * starRadius;
+          const y = sy + Math.sin(starAngle) * starRadius;
+          if (j === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
     
     // Draw HP bar
     const barWidth = this.width;

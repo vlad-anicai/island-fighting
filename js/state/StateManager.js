@@ -417,6 +417,36 @@ export class StateManager {
     }
     
     /**
+     * Reset all game progress
+     */
+    resetAll() {
+        this.coins = this.DEFAULT_COINS;
+        this.ownedAbilities = [...this.DEFAULT_ABILITIES];
+        this.keyBindings = { ...this.DEFAULT_BINDINGS };
+        this.hpUpgrades = this.DEFAULT_HP_UPGRADES;
+        
+        try {
+            localStorage.removeItem(this.STORAGE_KEYS.COINS);
+            localStorage.removeItem(this.STORAGE_KEYS.ABILITIES);
+            localStorage.removeItem(this.STORAGE_KEYS.BINDINGS);
+            localStorage.removeItem(this.STORAGE_KEYS.HP_UPGRADES);
+        } catch (error) {
+            console.error('Error clearing LocalStorage:', error);
+        }
+        
+        console.log('All progress reset');
+    }
+    
+    /**
+     * Calculate HP upgrade cost based on current upgrades
+     * @returns {number} Cost for next upgrade (increases with each purchase)
+     */
+    getHPUpgradeCost() {
+        // Cost increases: 50, 75, 100, 125, 150, etc. (+25 each time)
+        return 50 + (this.hpUpgrades * 25);
+    }
+    
+    /**
      * Get number of HP upgrades purchased
      * @returns {number} Number of HP upgrades
      */

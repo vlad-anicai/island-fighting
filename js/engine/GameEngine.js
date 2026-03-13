@@ -38,6 +38,7 @@ export class GameEngine {
         this.abilityShop = document.getElementById('abilityShop');
         this.hpUpgrade = document.getElementById('hpUpgrade');
         this.abilitySettings = document.getElementById('abilitySettings');
+        this.codesMenu = document.getElementById('codesMenu');
         this.controlsMenu = document.getElementById('controlsMenu');
         this.hud = document.getElementById('hud');
         
@@ -64,8 +65,31 @@ export class GameEngine {
             this.showMenu('settings');
         });
         
+        document.getElementById('secretCodeBtn').addEventListener('click', () => {
+            this.showMenu('codes');
+        });
+        
         document.getElementById('controlsBtn').addEventListener('click', () => {
             this.showMenu('controls');
+        });
+        
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            const btn = document.getElementById('resetBtn');
+            if (btn.dataset.confirming === 'true') {
+                this.resetProgress();
+            } else {
+                btn.dataset.confirming = 'true';
+                btn.textContent = 'Click again to confirm!';
+                btn.style.background = '#f44336';
+                btn.style.borderColor = '#c62828';
+                // Auto-cancel after 3 seconds
+                setTimeout(() => {
+                    btn.dataset.confirming = 'false';
+                    btn.textContent = 'Reset Progress';
+                    btn.style.background = '';
+                    btn.style.borderColor = '';
+                }, 3000);
+            }
         });
         
         // Back buttons
@@ -81,6 +105,10 @@ export class GameEngine {
             this.showMenu('main');
         });
         
+        document.getElementById('codesBackBtn').addEventListener('click', () => {
+            this.showMenu('main');
+        });
+        
         document.getElementById('controlsBackBtn').addEventListener('click', () => {
             this.showMenu('main');
         });
@@ -88,6 +116,15 @@ export class GameEngine {
         // HP Upgrade buy button
         document.getElementById('buyHPBtn').addEventListener('click', () => {
             this.purchaseHPUpgrade();
+        });
+        
+        // Code redemption
+        document.getElementById('redeemBtn').addEventListener('click', () => {
+            this.redeemCode();
+        });
+        
+        document.getElementById('codeInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') this.redeemCode();
         });
     }
     
@@ -97,6 +134,7 @@ export class GameEngine {
         this.abilityShop.classList.remove('active');
         this.hpUpgrade.classList.remove('active');
         this.abilitySettings.classList.remove('active');
+        this.codesMenu.classList.remove('active');
         this.controlsMenu.classList.remove('active');
         this.hud.classList.remove('active');
         
@@ -121,6 +159,11 @@ export class GameEngine {
                 this.scene = 'menu';
                 this.updateAbilitySettings(); // Update settings display
                 break;
+            case 'codes':
+                this.codesMenu.classList.add('active');
+                this.scene = 'menu';
+                this.clearCodeMessage();
+                break;
             case 'controls':
                 this.controlsMenu.classList.add('active');
                 this.scene = 'menu';
@@ -143,6 +186,7 @@ export class GameEngine {
             { type: 'STRONG_PUNCH', name: 'Strong Punch', cost: 100, description: 'Powerful melee attack' },
             { type: 'FIRE_BALL', name: 'Fire Ball', cost: 400, description: 'Ranged projectile attack' },
             { type: 'SHIELD', name: 'Shield', cost: 750, description: 'Temporary invincibility' },
+            { type: 'EARTHQUAKE', name: 'Earthquake', cost: 850, description: 'Stuns all enemies for 3s' },
             { type: 'TORNADO', name: 'Tornado', cost: 1000, description: 'Area damage attack' }
         ];
         
@@ -227,6 +271,7 @@ export class GameEngine {
             'STRONG_PUNCH': 'Strong Punch',
             'FIRE_BALL': 'Fire Ball',
             'SHIELD': 'Shield',
+            'EARTHQUAKE': 'Earthquake',
             'TORNADO': 'Tornado'
         };
         
@@ -316,7 +361,7 @@ export class GameEngine {
             currentMaxHP.textContent = this.stateManager.getMaxHP();
         }
         
-        const cost = 50;
+        const cost = this.stateManager.getHPUpgradeCost();
         if (upgradeCost) {
             upgradeCost.textContent = cost;
         }
@@ -333,13 +378,70 @@ export class GameEngine {
      * Purchase an HP upgrade
      */
     purchaseHPUpgrade() {
-        const cost = 50;
+        const cost = this.stateManager.getHPUpgradeCost();
         if (this.stateManager.purchaseHPUpgrade(cost)) {
             console.log('HP Upgrade purchased! New max HP:', this.stateManager.getMaxHP());
             this.updateHPUpgrade(); // Refresh display
         } else {
             console.log('Cannot purchase HP upgrade - insufficient coins');
         }
+    }
+    
+    /**
+     * Redeem a code for rewards
+     */
+    redeemCode() {
+        const codeInput = document.getElementById('codeInput');
+        const code = codeInput.value.trim().toUpperCase();
+        
+        if (!code) {
+            this.showCodeMessage('Please enter a code', 'error');
+            return;
+        }
+        
+        // Valid codes
+        const codes = {
+            '1MYEN.ROT': 100000
+        };
+        
+        if (codes[code]) {
+            const reward = codes[code];
+            this.stateManager.addCoins(reward);
+            this.showCodeMessage(`Success! +${reward.toLocaleString()} coins!`, 'success');
+            codeInput.value = '';
+            console.log(`Code redeemed: ${code} - Awarded ${reward} coins`);
+        } else {
+            this.showCodeMessage('Invalid code', 'error');
+        }
+    }
+    
+    /**
+     * Show code redemption message
+     */
+    showCodeMessage(message, type) {
+        const messageEl = document.getElementById('codeMessage');
+        messageEl.textContent = message;
+        messageEl.className = `code-message ${type}`;
+    }
+    
+    /**
+     * Clear code message
+     */
+    clearCodeMessage() {
+        const messageEl = document.getElementById('codeMessage');
+        const codeInput = document.getElementById('codeInput');
+        messageEl.textContent = '';
+        messageEl.className = 'code-message';
+        codeInput.value = '';
+    }
+    
+    /**
+     * Reset all game progress
+     */
+    resetProgress() {
+        this.stateManager.resetAll();
+        // Reload the page to reinitialize everything cleanly
+        window.location.reload();
     }
     
     startGameplay() {
@@ -539,6 +641,12 @@ export class GameEngine {
                                 'player'
                             );
                             this.projectiles.push(proj);
+                        } else if (result.type === 'EARTHQUAKE') {
+                            // Earthquake - stun all bots
+                            for (const bot of this.bots) {
+                                bot.stun(result.stunDuration);
+                            }
+                            console.log(`Earthquake! Stunned ${this.bots.length} bots for ${result.stunDuration / 1000}s`);
                         }
                     }
                 }
@@ -648,6 +756,9 @@ export class GameEngine {
         // Update HUD
         this.updateHUD();
         
+        // Render ability cooldown indicators
+        this.renderAbilityCooldowns();
+        
         // TODO: Render effects
         // Will be implemented in future tasks
     }
@@ -661,6 +772,109 @@ export class GameEngine {
         }
         document.getElementById('hudCoins').textContent = `Coins: ${this.stateManager.getCoins()}`;
         document.getElementById('hudLevel').textContent = `Level: ${this.level}`;
+    }
+    
+    /**
+     * Renders ability cooldown indicators in the bottom-right corner
+     */
+    renderAbilityCooldowns() {
+        if (!this.player) return;
+        
+        const ctx = this.ctx;
+        const keys = ['z', 'x', 'c', 'v'];
+        const abilityNames = {
+            'STRONG_PUNCH': 'Strong',
+            'FIRE_BALL': 'Fire',
+            'SHIELD': 'Shield',
+            'EARTHQUAKE': 'Quake',
+            'TORNADO': 'Tornado'
+        };
+        
+        const abilityColors = {
+            'STRONG_PUNCH': '#FF0000',
+            'FIRE_BALL': '#FF4500',
+            'SHIELD': '#00FFFF',
+            'EARTHQUAKE': '#8B4513',
+            'TORNADO': '#C0C0C0'
+        };
+        
+        const boxSize = 60;
+        const gap = 10;
+        const startX = this.canvas.width - (boxSize + gap);
+        const startY = this.canvas.height - (boxSize * 4 + gap * 5);
+        
+        ctx.imageSmoothingEnabled = false;
+        
+        keys.forEach((key, index) => {
+            const abilityType = this.player.abilities[key];
+            const cooldown = this.player.abilityCooldowns[key];
+            
+            const x = startX;
+            const y = startY + (index * (boxSize + gap));
+            
+            // Draw box background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(x, y, boxSize, boxSize);
+            
+            // Draw border
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, boxSize, boxSize);
+            
+            if (abilityType) {
+                // Draw ability color indicator
+                ctx.fillStyle = abilityColors[abilityType] || '#888';
+                ctx.fillRect(x + 4, y + 4, boxSize - 8, boxSize - 8);
+                
+                // Draw cooldown overlay if on cooldown
+                if (cooldown > 0) {
+                    const cooldownPercent = cooldown / this.getAbilityMaxCooldown(abilityType);
+                    const overlayHeight = (boxSize - 8) * cooldownPercent;
+                    
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(x + 4, y + 4, boxSize - 8, overlayHeight);
+                    
+                    // Draw cooldown text
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 16px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(Math.ceil(cooldown).toString(), x + boxSize / 2, y + boxSize / 2);
+                }
+                
+                // Draw ability name
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 10px Courier New';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(abilityNames[abilityType] || '', x + boxSize / 2, y + boxSize - 4);
+            } else {
+                // Empty slot
+                ctx.fillStyle = '#444';
+                ctx.fillRect(x + 4, y + 4, boxSize - 8, boxSize - 8);
+            }
+            
+            // Draw key label
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Courier New';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(key.toUpperCase(), x + boxSize / 2, y + 4);
+        });
+    }
+    
+    /**
+     * Get max cooldown for an ability type
+     */
+    getAbilityMaxCooldown(abilityType) {
+        const cooldowns = {
+            'STRONG_PUNCH': 5.0,
+            'FIRE_BALL': 8.0,
+            'SHIELD': 18.0,
+            'EARTHQUAKE': 15.0,
+            'TORNADO': 20.0
+        };
+        return cooldowns[abilityType] || 1.0;
     }
     
     stop() {

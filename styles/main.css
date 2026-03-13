@@ -243,3 +243,79 @@ body {
     color: #ffd700;
     font-weight: bold;
 }
+
+/* Codes Menu */
+.code-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 20px;
+}
+
+.code-input {
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 3px solid #fff;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.code-input::placeholder {
+    color: #aaa;
+    text-transform: none;
+}
+
+.code-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.code-message {
+    min-height: 30px;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    padding: 10px;
+}
+
+.code-message.success {
+    color: #4CAF50;
+}
+
+.code-message.error {
+    color: #f44336;
+}
+
+/* Reset Button */
+.reset-btn {
+    background: #9E9E9E;
+    border-color: #616161;
+    margin-top: 20px;
+}
+
+.reset-btn:hover {
+    background: #BDBDBD;
+}
+
+/* Secret Code Button */
+.secret-code-btn {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 10px;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.secret-code-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+}

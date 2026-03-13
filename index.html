@@ -18,6 +18,9 @@
             <button id="hpUpgradeBtn" class="menu-btn">HP Upgrade</button>
             <button id="settingsBtn" class="menu-btn">Ability Settings</button>
             <button id="controlsBtn" class="menu-btn">Controls</button>
+            <button id="resetBtn" class="menu-btn reset-btn">Reset Progress</button>
+            <!-- Hidden codes button in corner -->
+            <div id="secretCodeBtn" class="secret-code-btn" title="Click for codes"></div>
         </div>
 
         <!-- Ability Shop Menu -->
@@ -46,6 +49,17 @@
             <h2>Ability Settings</h2>
             <div id="keyBindings" class="key-bindings"></div>
             <button id="settingsBackBtn" class="menu-btn back-btn">Back</button>
+        </div>
+
+        <!-- Codes Menu -->
+        <div id="codesMenu" class="menu">
+            <h2>Redeem Code</h2>
+            <div class="code-input-container">
+                <input type="text" id="codeInput" class="code-input" placeholder="Enter code here..." maxlength="20">
+                <button id="redeemBtn" class="menu-btn">Redeem</button>
+            </div>
+            <div id="codeMessage" class="code-message"></div>
+            <button id="codesBackBtn" class="menu-btn back-btn">Back</button>
         </div>
 
         <!-- Controls Menu -->
