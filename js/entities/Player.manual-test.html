@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Manual Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            background-color: #1a1a1a;
+            color: #00ff00;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #00ff00;
+        }
+        
+        #canvas {
+            display: block;
+            margin: 20px auto;
+            border: 2px solid #00ff00;
+            background-color: #87CEEB;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        
+        .info {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #2a2a2a;
+            border: 1px solid #00ff00;
+        }
+        
+        .controls {
+            margin: 10px 0;
+        }
+        
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #1a1a1a;
+            border-left: 3px solid #00ff00;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #444;
+        }
+        
+        button {
+            background-color: #00ff00;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background-color: #00cc00;
+        }
+        
+        .pass {
+            color: #00ff00;
+        }
+        
+        .fail {
+            color: #ff0000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Player Manual Test</h1>
+    
+    <canvas id="canvas" width="1000" height="600"></canvas>
+    
+    <div class="info">
+        <div class="controls">
+            <h3>Controls:</h3>
+            <ul>
+                <li><strong>A</strong> - Move Left</li>
+                <li><strong>D</strong> - Move Right</li>
+                <li><strong>Space</strong> - Jump</li>
+                <li><strong>Left Click</strong> - Punch</li>
+            </ul>
+        </div>
+        
+        <div class="status">
+            <h3>Player Status:</h3>
+            <div id="status">
+                <p>Position: <span id="position">-</span></p>
+                <p>Velocity: <span id="velocity">-</span></p>
+                <p>HP: <span id="hp">-</span></p>
+                <p>Grounded: <span id="grounded">-</span></p>
+                <p>Facing: <span id="facing">-</span></p>
+                <p>Punch Cooldown: <span id="punchCooldown">-</span></p>
+                <p>Shield Active: <span id="shield">-</span></p>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test Actions:</h3>
+            <button onclick="testDamage()">Take 20 Damage</button>
+            <button onclick="testHeal()">Heal to Full</button>
+            <button onclick="testShield()">Activate Shield (10s)</button>
+            <button onclick="testTeleportLeft()">Teleport to Left Edge</button>
+            <button onclick="testTeleportRight()">Teleport to Right Edge</button>
+            <button onclick="testTeleportCenter()">Teleport to Center</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test Results:</h3>
+            <div id="testResults"></div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { Player } from './Player.js';
+        import { Island } from '../world/Island.js';
+        
+        // Canvas setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create game objects
+        const island = new Island(1);
+        const player = new Player(
+            island.x + island.width / 2 - 16,
+            island.y - 48
+        );
+        
+        // Input tracking
+        const keys = {};
+        let mouseClicked = false;
+        
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                mouseClicked = true;
+            }
+        });
+        
+        // Mock input handler
+        const mockInput = {
+            isKeyPressed: (key) => {
+                if (key === 'space') return keys[' '] || false;
+                return keys[key] || false;
+            }
+        };
+        
+        // Game loop
+        let lastTime = performance.now();
+        
+        function gameLoop(currentTime) {
+            const deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+            
+            // Update player
+            player.update(deltaTime, mockInput, island);
+            
+            // Handle punch
+            if (mouseClicked) {
+                const hitbox = player.punch();
+                if (hitbox) {
+                    // Visual feedback for punch
+                    setTimeout(() => {
+                        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+                        ctx.fillRect(hitbox.x, hitbox.y, hitbox.width, hitbox.height);
+                    }, 0);
+                }
+                mouseClicked = false;
+            }
+            
+            // Render
+            render();
+            
+            // Update status display
+            updateStatus();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Render island
+            island.render(ctx);
+            
+            // Render player
+            player.render(ctx);
+            
+            // Draw boundary indicators
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(island.x, 0, island.width, canvas.height);
+            ctx.setLineDash([]);
+        }
+        
+        function updateStatus() {
+            document.getElementById('position').textContent = 
+                `(${Math.round(player.x)}, ${Math.round(player.y)})`;
+            document.getElementById('velocity').textContent = 
+                `(${player.velocityX.toFixed(2)}, ${player.velocityY.toFixed(2)})`;
+            document.getElementById('hp').textContent = 
+                `${player.hp} / ${player.maxHp}`;
+            document.getElementById('grounded').textContent = 
+                player.isGrounded ? 'Yes' : 'No';
+            document.getElementById('facing').textContent = 
+                player.facingRight ? 'Right' : 'Left';
+            document.getElementById('punchCooldown').textContent = 
+                player.punchCooldown.toFixed(2) + 's';
+            document.getElementById('shield').textContent = 
+                player.shieldActive ? 'Yes' : 'No';
+        }
+        
+        // Test functions
+        window.testDamage = function() {
+            const oldHp = player.hp;
+            player.takeDamage(20);
+            const newHp = player.hp;
+            
+            logTest('Damage Test', 
+                newHp === oldHp - 20 || (oldHp < 20 && newHp === 0),
+                `HP: ${oldHp} → ${newHp}`);
+        };
+        
+        window.testHeal = function() {
+            player.hp = player.maxHp;
+            logTest('Heal Test', player.hp === 100, `HP restored to ${player.hp}`);
+        };
+        
+        window.testShield = function() {
+            player.shieldActive = true;
+            player.shieldEndTime = Date.now() + 10000;
+            logTest('Shield Test', player.shieldActive, 'Shield activated for 10 seconds');
+        };
+        
+        window.testTeleportLeft = function() {
+            player.x = island.x;
+            player.y = island.y - player.height;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            logTest('Teleport Left', true, `Moved to (${player.x}, ${player.y})`);
+        };
+        
+        window.testTeleportRight = function() {
+            player.x = island.x + island.width - player.width;
+            player.y = island.y - player.height;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            logTest('Teleport Right', true, `Moved to (${player.x}, ${player.y})`);
+        };
+        
+        window.testTeleportCenter = function() {
+            player.x = island.x + island.width / 2 - player.width / 2;
+            player.y = island.y - player.height;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            logTest('Teleport Center', true, `Moved to (${player.x}, ${player.y})`);
+        };
+        
+        function logTest(name, passed, details) {
+            const resultsDiv = document.getElementById('testResults');
+            const testEntry = document.createElement('p');
+            testEntry.innerHTML = `
+                <span class="${passed ? 'pass' : 'fail'}">[${passed ? 'PASS' : 'FAIL'}]</span>
+                ${name}: ${details}
+            `;
+            resultsDiv.insertBefore(testEntry, resultsDiv.firstChild);
+        }
+        
+        // Start game loop
+        gameLoop(performance.now());
+        
+        // Initial test
+        logTest('Player Initialization', 
+            player.hp === 100 && player.width === 32 && player.height === 48,
+            'Player created with correct initial values');
+    </script>
+</body>
+</html>

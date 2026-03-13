@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameEngine Manual Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 2px solid #00ff00;
+            background: #0a0a0a;
+        }
+        
+        .test-result {
+            margin: 10px 0;
+            padding: 5px;
+        }
+        
+        .pass {
+            color: #00ff00;
+        }
+        
+        .fail {
+            color: #ff0000;
+        }
+        
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background: #00cc00;
+        }
+        
+        #testCanvas {
+            border: 2px solid #00ff00;
+            margin: 10px 0;
+            display: block;
+        }
+        
+        .menu {
+            display: none;
+            padding: 20px;
+            border: 2px solid #00ff00;
+            margin: 10px 0;
+        }
+        
+        .menu.active {
+            display: block;
+        }
+        
+        #hud {
+            display: none;
+            padding: 10px;
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+        }
+        
+        #hud.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>GameEngine Manual Test Suite</h1>
+    <p>This page tests the GameEngine implementation for Task 2.3</p>
+    
+    <div class="test-section">
+        <h2>Test Canvas</h2>
+        <canvas id="testCanvas" width="1000" height="600"></canvas>
+    </div>
+    
+    <!-- Mock Menu Elements -->
+    <div id="mainMenu" class="menu active">
+        <h3>Main Menu</h3>
+        <button id="playBtn">Play</button>
+        <button id="shopBtn">Ability Shop</button>
+        <button id="settingsBtn">Ability Settings</button>
+        <button id="controlsBtn">Controls</button>
+    </div>
+    
+    <div id="abilityShop" class="menu">
+        <h3>Ability Shop</h3>
+        <button id="shopBackBtn">Back</button>
+    </div>
+    
+    <div id="abilitySettings" class="menu">
+        <h3>Ability Settings</h3>
+        <button id="settingsBackBtn">Back</button>
+    </div>
+    
+    <div id="controlsMenu" class="menu">
+        <h3>Controls</h3>
+        <button id="controlsBackBtn">Back</button>
+    </div>
+    
+    <div id="hud">
+        <h3>HUD (Gameplay Active)</h3>
+    </div>
+    
+    <div class="test-section">
+        <h2>Automated Tests</h2>
+        <button onclick="runTests()">Run All Tests</button>
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Manual Tests</h2>
+        <button onclick="testLevelTransition()">Test Level Transition</button>
+        <button onclick="testGameLoop()">Test Game Loop (5 sec)</button>
+        <button onclick="testSceneSwitch()">Test Scene Switching</button>
+        <button onclick="testLevelCap()">Test Level Cap (999)</button>
+        <div id="manualResults"></div>
+    </div>
+    
+    <script type="module">
+        import { GameEngine } from './GameEngine.js';
+        
+        const canvas = document.getElementById('testCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        
+        let game;
+        
+        function log(message, isPass = true) {
+            const resultsDiv = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.className = `test-result ${isPass ? 'pass' : 'fail'}`;
+            div.textContent = `${isPass ? '✓' : '✗'} ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        function logManual(message) {
+            const resultsDiv = document.getElementById('manualResults');
+            const div = document.createElement('div');
+            div.className = 'test-result pass';
+            div.textContent = `→ ${message}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        window.runTests = function() {
+            document.getElementById('testResults').innerHTML = '';
+            
+            // Test 1: Constructor initialization
+            game = new GameEngine(canvas, ctx);
+            log('GameEngine constructor creates instance', game !== null);
+            log('Initial scene is menu', game.scene === 'menu');
+            log('Initial level is 1', game.level === 1);
+            log('Initial running is false', game.running === false);
+            log('Bots array is empty', game.bots.length === 0);
+            log('Projectiles array is empty', game.projectiles.length === 0);
+            log('Player is null', game.player === null);
+            log('Island is null', game.island === null);
+            
+            // Test 2: Level initialization
+            game.initializeLevel(5);
+            log('initializeLevel sets level number', game.level === 5);
+            
+            game.bots = [1, 2, 3];
+            game.projectiles = [1];
+            game.initializeLevel(3);
+            log('initializeLevel clears bots', game.bots.length === 0);
+            log('initializeLevel clears projectiles', game.projectiles.length === 0);
+            
+            // Test 3: Level cap
+            game.initializeLevel(1500);
+            log('Level capped at 999', game.level === 999);
+            
+            // Test 4: Level transitions
+            game.level = 5;
+            game.transitionToNextLevel();
+            log('transitionToNextLevel increments level', game.level === 6);
+            
+            // Test 5: Scene management
+            game.showMenu('shop');
+            log('showMenu switches to shop', 
+                document.getElementById('abilityShop').classList.contains('active'));
+            
+            game.showMenu('settings');
+            log('showMenu switches to settings', 
+                document.getElementById('abilitySettings').classList.contains('active'));
+            
+            game.showMenu('controls');
+            log('showMenu switches to controls', 
+                document.getElementById('controlsMenu').classList.contains('active'));
+            
+            game.showMenu('main');
+            log('showMenu switches back to main', 
+                document.getElementById('mainMenu').classList.contains('active'));
+            
+            // Test 6: Game loop
+            game.start();
+            log('start() sets running to true', game.running === true);
+            
+            game.stop();
+            log('stop() sets running to false', game.running === false);
+            
+            // Test 7: Delta time calculation
+            game.running = true;
+            game.scene = 'gameplay';
+            game.lastFrameTime = 0;
+            
+            let capturedDeltaTime = null;
+            game.updateGameplay = function(dt) {
+                capturedDeltaTime = dt;
+            };
+            
+            game.gameLoop(16.67);
+            log('Delta time calculated correctly (~0.01667s for 60 FPS)', 
+                Math.abs(capturedDeltaTime - 0.01667) < 0.001);
+            
+            game.stop();
+            
+            log('All automated tests completed!', true);
+        };
+        
+        window.testLevelTransition = function() {
+            document.getElementById('manualResults').innerHTML = '';
+            game = new GameEngine(canvas, ctx);
+            
+            logManual('Starting at level 1');
+            game.initializeLevel(1);
+            
+            setTimeout(() => {
+                logManual('Transitioning to level 2...');
+                game.transitionToNextLevel();
+                logManual(`Current level: ${game.level}`);
+                
+                setTimeout(() => {
+                    logManual('Transitioning to level 3...');
+                    game.transitionToNextLevel();
+                    logManual(`Current level: ${game.level}`);
+                }, 1000);
+            }, 1000);
+        };
+        
+        window.testGameLoop = function() {
+            document.getElementById('manualResults').innerHTML = '';
+            game = new GameEngine(canvas, ctx);
+            
+            let frameCount = 0;
+            const startTime = performance.now();
+            
+            game.updateGameplay = function(deltaTime) {
+                frameCount++;
+                const elapsed = (performance.now() - startTime) / 1000;
+                
+                if (elapsed >= 5) {
+                    game.stop();
+                    const fps = frameCount / elapsed;
+                    logManual(`Game loop ran for 5 seconds`);
+                    logManual(`Total frames: ${frameCount}`);
+                    logManual(`Average FPS: ${fps.toFixed(2)}`);
+                    logManual(`Target is 60 FPS, actual: ${fps >= 55 && fps <= 65 ? 'PASS' : 'CHECK'}`);
+                }
+            };
+            
+            game.scene = 'gameplay';
+            game.start();
+            logManual('Game loop started, running for 5 seconds...');
+        };
+        
+        window.testSceneSwitch = function() {
+            document.getElementById('manualResults').innerHTML = '';
+            game = new GameEngine(canvas, ctx);
+            
+            logManual('Testing scene transitions...');
+            
+            game.showMenu('main');
+            logManual(`Scene: ${game.scene}, Main menu active: ${document.getElementById('mainMenu').classList.contains('active')}`);
+            
+            setTimeout(() => {
+                game.startGameplay();
+                logManual(`Scene: ${game.scene}, HUD active: ${document.getElementById('hud').classList.contains('active')}`);
+                
+                setTimeout(() => {
+                    game.showMenu('shop');
+                    logManual(`Scene: ${game.scene}, Shop active: ${document.getElementById('abilityShop').classList.contains('active')}`);
+                    
+                    setTimeout(() => {
+                        game.showMenu('main');
+                        logManual(`Scene: ${game.scene}, Back to main menu`);
+                    }, 1000);
+                }, 1000);
+            }, 1000);
+        };
+        
+        window.testLevelCap = function() {
+            document.getElementById('manualResults').innerHTML = '';
+            game = new GameEngine(canvas, ctx);
+            
+            logManual('Testing level cap at 999...');
+            
+            game.initializeLevel(998);
+            logManual(`Level 998: ${game.level}`);
+            
+            setTimeout(() => {
+                game.transitionToNextLevel();
+                logManual(`Level 999: ${game.level}`);
+                
+                setTimeout(() => {
+                    game.transitionToNextLevel();
+                    logManual(`Attempting level 1000, capped at: ${game.level}`);
+                    logManual(`Level cap working: ${game.level === 999 ? 'PASS' : 'FAIL'}`);
+                }, 1000);
+            }, 1000);
+        };
+        
+        // Auto-run tests on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                runTests();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

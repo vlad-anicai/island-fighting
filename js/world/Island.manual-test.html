@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Island Manual Test</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Courier New', monospace;
+      background-color: #1a1a1a;
+      color: #fff;
+    }
+    
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    #canvas {
+      display: block;
+      margin: 0 auto 20px;
+      border: 2px solid #fff;
+      background: linear-gradient(to bottom, #87CEEB 0%, #E0F6FF 100%);
+    }
+    
+    .controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    button {
+      padding: 10px 20px;
+      margin: 0 5px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    .info {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #2a2a2a;
+      border-radius: 8px;
+    }
+    
+    .test-results {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #333;
+      border-radius: 4px;
+    }
+    
+    .pass {
+      color: #4CAF50;
+    }
+    
+    .fail {
+      color: #f44336;
+    }
+    
+    .test-item {
+      margin: 5px 0;
+      padding: 5px;
+      border-left: 3px solid #666;
+      padding-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Island Class Manual Test</h1>
+  
+  <canvas id="canvas" width="1000" height="700"></canvas>
+  
+  <div class="controls">
+    <button onclick="showLevel(1)">Level 1 (Tropical)</button>
+    <button onclick="showLevel(2)">Level 2 (Volcanic)</button>
+    <button onclick="showLevel(3)">Level 3 (Crystal)</button>
+    <button onclick="showLevel(4)">Level 4 (Tropical)</button>
+    <button onclick="runTests()">Run Tests</button>
+  </div>
+  
+  <div class="info">
+    <h2>Test Information</h2>
+    <p><strong>Current Level:</strong> <span id="currentLevel">1</span></p>
+    <p><strong>Current Design:</strong> <span id="currentDesign">tropical</span></p>
+    <p><strong>Island Bounds:</strong> x: 100-900, y: 500-600</p>
+    
+    <h3>Visual Design Variants:</h3>
+    <ul>
+      <li><strong>Tropical:</strong> Sandy platform with grass layer and green patches</li>
+      <li><strong>Volcanic:</strong> Dark rock with lava cracks and glowing effects</li>
+      <li><strong>Crystal:</strong> Light blue crystal with formations and highlights</li>
+    </ul>
+    
+    <div class="test-results" id="testResults">
+      <h3>Test Results</h3>
+      <p>Click "Run Tests" to execute automated tests</p>
+    </div>
+  </div>
+  
+  <script src="Island.js"></script>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let currentIsland = null;
+    
+    function showLevel(level) {
+      currentIsland = new Island(level);
+      document.getElementById('currentLevel').textContent = level;
+      document.getElementById('currentDesign').textContent = currentIsland.design;
+      
+      // Clear canvas with sky background
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#87CEEB');
+      gradient.addColorStop(1, '#E0F6FF');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Render the island
+      currentIsland.render(ctx);
+      
+      // Draw boundary indicators
+      ctx.strokeStyle = '#FF0000';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(currentIsland.x, currentIsland.y, currentIsland.width, currentIsland.height);
+      ctx.setLineDash([]);
+      
+      // Draw test points
+      drawTestPoints();
+    }
+    
+    function drawTestPoints() {
+      const testPoints = [
+        { x: 500, y: 550, inside: true, label: 'Center' },
+        { x: 100, y: 500, inside: true, label: 'Top-Left' },
+        { x: 900, y: 600, inside: true, label: 'Bottom-Right' },
+        { x: 50, y: 550, inside: false, label: 'Left Outside' },
+        { x: 950, y: 550, inside: false, label: 'Right Outside' },
+        { x: 500, y: 450, inside: false, label: 'Above' },
+        { x: 500, y: 650, inside: false, label: 'Below' }
+      ];
+      
+      testPoints.forEach(point => {
+        const isInside = currentIsland.containsPoint(point.x, point.y);
+        const expectedInside = point.inside;
+        
+        // Draw point
+        ctx.fillStyle = isInside ? '#00FF00' : '#FF0000';
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw label
+        ctx.fillStyle = '#000000';
+        ctx.font = '12px Courier New';
+        ctx.fillText(point.label, point.x + 10, point.y - 10);
+        
+        // Verify correctness
+        if (isInside !== expectedInside) {
+          console.error(`Test point ${point.label} failed: expected ${expectedInside}, got ${isInside}`);
+        }
+      });
+    }
+    
+    function runTests() {
+      const results = [];
+      
+      // Test 1: Constructor initializes correct dimensions
+      const island1 = new Island(1);
+      results.push({
+        name: 'Constructor initializes correct dimensions',
+        pass: island1.width === 800 && island1.height === 100 && island1.x === 100 && island1.y === 500
+      });
+      
+      // Test 2: Design selection cycles correctly
+      const designs = [
+        new Island(1).design,
+        new Island(2).design,
+        new Island(3).design,
+        new Island(4).design
+      ];
+      results.push({
+        name: 'Design cycles through 3 variants',
+        pass: designs[0] === 'tropical' && designs[1] === 'volcanic' && 
+              designs[2] === 'crystal' && designs[3] === 'tropical'
+      });
+      
+      // Test 3: At least 3 different designs exist
+      const uniqueDesigns = new Set();
+      for (let i = 1; i <= 10; i++) {
+        uniqueDesigns.add(new Island(i).design);
+      }
+      results.push({
+        name: 'At least 3 different design variants exist',
+        pass: uniqueDesigns.size >= 3
+      });
+      
+      // Test 4: Consecutive levels have different designs
+      const level1 = new Island(1);
+      const level2 = new Island(2);
+      const level3 = new Island(3);
+      results.push({
+        name: 'Consecutive levels have different designs',
+        pass: level1.design !== level2.design && level2.design !== level3.design
+      });
+      
+      // Test 5: containsPoint returns true for points inside
+      const testIsland = new Island(1);
+      results.push({
+        name: 'containsPoint returns true for center point',
+        pass: testIsland.containsPoint(500, 550) === true
+      });
+      
+      // Test 6: containsPoint returns false for points outside
+      results.push({
+        name: 'containsPoint returns false for outside points',
+        pass: testIsland.containsPoint(50, 550) === false && 
+              testIsland.containsPoint(950, 550) === false
+      });
+      
+      // Test 7: containsPoint handles boundaries correctly
+      results.push({
+        name: 'containsPoint handles boundary edges correctly',
+        pass: testIsland.containsPoint(100, 550) === true && 
+              testIsland.containsPoint(900, 550) === true &&
+              testIsland.containsPoint(99, 550) === false &&
+              testIsland.containsPoint(901, 550) === false
+      });
+      
+      // Test 8: Render method exists and doesn't throw
+      let renderWorks = false;
+      try {
+        const mockCanvas = document.createElement('canvas');
+        const mockCtx = mockCanvas.getContext('2d');
+        testIsland.render(mockCtx);
+        renderWorks = true;
+      } catch (e) {
+        console.error('Render test failed:', e);
+      }
+      results.push({
+        name: 'Render method executes without errors',
+        pass: renderWorks
+      });
+      
+      // Display results
+      const resultsDiv = document.getElementById('testResults');
+      const passCount = results.filter(r => r.pass).length;
+      const totalCount = results.length;
+      
+      let html = `<h3>Test Results: ${passCount}/${totalCount} Passed</h3>`;
+      results.forEach(result => {
+        const className = result.pass ? 'pass' : 'fail';
+        const icon = result.pass ? '✓' : '✗';
+        html += `<div class="test-item ${className}">${icon} ${result.name}</div>`;
+      });
+      
+      resultsDiv.innerHTML = html;
+      
+      console.log('Test Results:', results);
+    }
+    
+    // Initialize with level 1
+    showLevel(1);
+  </script>
+</body>
+</html>

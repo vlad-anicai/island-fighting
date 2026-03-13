@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Island Fighting Game</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+        
+        <!-- Main Menu -->
+        <div id="mainMenu" class="menu active">
+            <h1>Island Fighting</h1>
+            <button id="playBtn" class="menu-btn">Play</button>
+            <button id="shopBtn" class="menu-btn">Ability Shop</button>
+            <button id="hpUpgradeBtn" class="menu-btn">HP Upgrade</button>
+            <button id="settingsBtn" class="menu-btn">Ability Settings</button>
+            <button id="controlsBtn" class="menu-btn">Controls</button>
+        </div>
+
+        <!-- Ability Shop Menu -->
+        <div id="abilityShop" class="menu">
+            <h2>Ability Shop</h2>
+            <div id="coinDisplay" class="coin-display">Coins: 0</div>
+            <div id="abilityList" class="ability-list"></div>
+            <button id="shopBackBtn" class="menu-btn back-btn">Back</button>
+        </div>
+
+        <!-- HP Upgrade Menu -->
+        <div id="hpUpgrade" class="menu">
+            <h2>HP Upgrade</h2>
+            <div id="hpCoinDisplay" class="coin-display">Coins: 0</div>
+            <div class="upgrade-info">
+                <p>Current Max HP: <span id="currentMaxHP">100</span></p>
+                <p>Upgrade Cost: <span id="upgradeCost">50</span> coins</p>
+                <p>HP per Upgrade: +10</p>
+            </div>
+            <button id="buyHPBtn" class="menu-btn">Buy HP Upgrade</button>
+            <button id="hpUpgradeBackBtn" class="menu-btn back-btn">Back</button>
+        </div>
+
+        <!-- Ability Settings Menu -->
+        <div id="abilitySettings" class="menu">
+            <h2>Ability Settings</h2>
+            <div id="keyBindings" class="key-bindings"></div>
+            <button id="settingsBackBtn" class="menu-btn back-btn">Back</button>
+        </div>
+
+        <!-- Controls Menu -->
+        <div id="controlsMenu" class="menu">
+            <h2>Controls</h2>
+            <div class="controls-list">
+                <div class="control-item"><span class="key">A</span> - Move Left</div>
+                <div class="control-item"><span class="key">D</span> - Move Right</div>
+                <div class="control-item"><span class="key">Space</span> - Jump</div>
+                <div class="control-item"><span class="key">Left Click</span> - Punch</div>
+                <div class="control-item"><span class="key">Z, X, C, V</span> - Use Abilities</div>
+            </div>
+            <button id="controlsBackBtn" class="menu-btn back-btn">Back</button>
+        </div>
+
+        <!-- HUD (shown during gameplay) -->
+        <div id="hud" class="hud">
+            <div id="hudHP" class="hud-item">HP: 100</div>
+            <div id="hudCoins" class="hud-item">Coins: 0</div>
+            <div id="hudLevel" class="hud-item">Level: 1</div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

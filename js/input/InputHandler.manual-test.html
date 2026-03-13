@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InputHandler Manual Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .test-section h2 {
+            color: #555;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        .key-display {
+            display: inline-block;
+            padding: 10px 15px;
+            margin: 5px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .key-display.active {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .mouse-info {
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.true {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .status.false {
+            background: #f44336;
+            color: white;
+        }
+        
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .instructions ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>InputHandler Manual Test</h1>
+        
+        <div class="instructions">
+            <strong>Test Instructions:</strong>
+            <ul>
+                <li>Press keyboard keys (A, D, Space, Z, X, C, V) to see them light up</li>
+                <li>Click the mouse button to test mouse tracking</li>
+                <li>Move the mouse to see position updates</li>
+                <li>Click "Consume Click" button to test click consumption</li>
+            </ul>
+        </div>
+        
+        <div class="test-section">
+            <h2>Movement Keys</h2>
+            <div class="key-display" id="key-a">A</div>
+            <div class="key-display" id="key-d">D</div>
+            <div class="key-display" id="key-space">Space</div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Ability Keys</h2>
+            <div class="key-display" id="key-z">Z</div>
+            <div class="key-display" id="key-x">X</div>
+            <div class="key-display" id="key-c">C</div>
+            <div class="key-display" id="key-v">V</div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Mouse State</h2>
+            <div class="mouse-info">
+                <div>
+                    Mouse Down: <span class="status" id="mouse-down">false</span>
+                </div>
+                <div>
+                    Position: X=<span id="mouse-x">0</span>, Y=<span id="mouse-y">0</span>
+                </div>
+                <div style="margin-top: 10px;">
+                    <button onclick="testConsumeClick()" style="padding: 10px 20px; cursor: pointer;">
+                        Consume Click
+                    </button>
+                    <span id="consume-result" style="margin-left: 10px; font-weight: bold;"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>Test Results</h2>
+            <div id="test-results" style="font-family: monospace; white-space: pre-wrap;"></div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { InputHandler } from './InputHandler.js';
+        
+        // Create InputHandler instance
+        const inputHandler = new InputHandler();
+        window.inputHandler = inputHandler; // Make available globally for button onclick
+        
+        // Log initialization
+        const resultsDiv = document.getElementById('test-results');
+        resultsDiv.textContent = 'InputHandler initialized successfully\n';
+        
+        // Update display function
+        function updateDisplay() {
+            // Update keyboard keys
+            const keys = ['a', 'd', 'space', 'z', 'x', 'c', 'v'];
+            keys.forEach(key => {
+                const elementId = key === 'space' ? 'key-space' : `key-${key}`;
+                const element = document.getElementById(elementId);
+                if (element) {
+                    if (inputHandler.isKeyPressed(key)) {
+                        element.classList.add('active');
+                    } else {
+                        element.classList.remove('active');
+                    }
+                }
+            });
+            
+            // Update mouse state
+            const mouseDownElement = document.getElementById('mouse-down');
+            const isDown = inputHandler.isMouseDown();
+            mouseDownElement.textContent = isDown.toString();
+            mouseDownElement.className = `status ${isDown}`;
+            
+            // Update mouse position
+            const pos = inputHandler.getMousePosition();
+            document.getElementById('mouse-x').textContent = pos.x;
+            document.getElementById('mouse-y').textContent = pos.y;
+            
+            requestAnimationFrame(updateDisplay);
+        }
+        
+        // Start display update loop
+        updateDisplay();
+        
+        // Test consume click function
+        window.testConsumeClick = function() {
+            const result = inputHandler.consumeMouseClick();
+            const resultElement = document.getElementById('consume-result');
+            resultElement.textContent = `Result: ${result}`;
+            resultElement.style.color = result ? '#4CAF50' : '#f44336';
+            
+            // Log to results
+            resultsDiv.textContent += `consumeMouseClick() returned: ${result}\n`;
+            
+            // Clear result after 2 seconds
+            setTimeout(() => {
+                resultElement.textContent = '';
+            }, 2000);
+        };
+        
+        // Run automated tests
+        function runAutomatedTests() {
+            resultsDiv.textContent += '\n=== Running Automated Tests ===\n';
+            
+            // Test 1: Initial state
+            const test1 = !inputHandler.isKeyPressed('a') && 
+                         !inputHandler.isMouseDown() &&
+                         inputHandler.getMousePosition().x === 0;
+            resultsDiv.textContent += `Test 1 - Initial state: ${test1 ? 'PASS' : 'FAIL'}\n`;
+            
+            // Test 2: consumeMouseClick without click
+            const test2 = !inputHandler.consumeMouseClick();
+            resultsDiv.textContent += `Test 2 - Consume without click: ${test2 ? 'PASS' : 'FAIL'}\n`;
+            
+            resultsDiv.textContent += '\nManual tests ready. Press keys and click mouse to test.\n';
+        }
+        
+        // Run tests after a short delay
+        setTimeout(runAutomatedTests, 100);
+    </script>
+</body>
+</html>

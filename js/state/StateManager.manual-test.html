@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StateManager Manual Tests</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        h1 { color: #4ec9b0; }
+        h2 { color: #569cd6; margin-top: 30px; }
+        .test { 
+            margin: 10px 0;
+            padding: 10px;
+            background: #252526;
+            border-left: 3px solid #007acc;
+        }
+        .pass { border-left-color: #4ec9b0; }
+        .fail { border-left-color: #f48771; }
+        .test-name { font-weight: bold; }
+        .result { margin-left: 20px; }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            margin: 10px 5px;
+        }
+        button:hover { background: #1177bb; }
+        #summary {
+            margin-top: 30px;
+            padding: 15px;
+            background: #252526;
+            border: 2px solid #007acc;
+        }
+    </style>
+</head>
+<body>
+    <h1>StateManager Manual Tests</h1>
+    <p>This page tests the StateManager class functionality in the browser.</p>
+    
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="clearStorage()">Clear LocalStorage</button>
+    <button onclick="location.reload()">Reload Page</button>
+    
+    <div id="results"></div>
+    <div id="summary"></div>
+    
+    <script type="module">
+        import { StateManager } from './StateManager.js';
+        
+        let passCount = 0;
+        let failCount = 0;
+        
+        function assert(condition, message) {
+            if (condition) {
+                passCount++;
+                return { pass: true, message };
+            } else {
+                failCount++;
+                return { pass: false, message };
+            }
+        }
+        
+        function assertEqual(actual, expected, message) {
+            const condition = JSON.stringify(actual) === JSON.stringify(expected);
+            if (!condition) {
+                message += ` (expected: ${JSON.stringify(expected)}, got: ${JSON.stringify(actual)})`;
+            }
+            return assert(condition, message);
+        }
+        
+        function displayResult(testName, result) {
+            const div = document.createElement('div');
+            div.className = `test ${result.pass ? 'pass' : 'fail'}`;
+            div.innerHTML = `
+                <div class="test-name">${result.pass ? '✓' : '✗'} ${testName}</div>
+                <div class="result">${result.message}</div>
+            `;
+            document.getElementById('results').appendChild(div);
+        }
+        
+        function displaySummary() {
+            const total = passCount + failCount;
+            const percentage = total > 0 ? Math.round((passCount / total) * 100) : 0;
+            document.getElementById('summary').innerHTML = `
+                <h2>Test Summary</h2>
+                <p>Total: ${total} | Passed: ${passCount} | Failed: ${failCount} | Success Rate: ${percentage}%</p>
+            `;
+        }
+        
+        window.runAllTests = function() {
+            document.getElementById('results').innerHTML = '';
+            passCount = 0;
+            failCount = 0;
+            
+            // Clear storage before tests
+            localStorage.clear();
+            
+            // Coin Balance Tests
+            document.getElementById('results').innerHTML += '<h2>Coin Balance Tests</h2>';
+            
+            let state = new StateManager();
+            displayResult('Initialize with 0 coins', assertEqual(state.getCoins(), 0, 'Default coins should be 0'));
+            
+            state.addCoins(100);
+            displayResult('Add coins', assertEqual(state.getCoins(), 100, 'Should have 100 coins'));
+            
+            state.addCoins(50);
+            displayResult('Accumulate coins', assertEqual(state.getCoins(), 150, 'Should have 150 coins'));
+            
+            let spendResult = state.spendCoins(50);
+            displayResult('Spend coins with sufficient balance', 
+                assert(spendResult && state.getCoins() === 100, 'Should spend 50 coins'));
+            
+            spendResult = state.spendCoins(200);
+            displayResult('Reject spending with insufficient balance', 
+                assert(!spendResult && state.getCoins() === 100, 'Should not spend 200 coins'));
+            
+            // Test persistence
+            state = new StateManager();
+            displayResult('Persist coins across instances', 
+                assertEqual(state.getCoins(), 100, 'Should load 100 coins from storage'));
+            
+            // Test corrupted data
+            localStorage.setItem('island_fighting_coins', 'invalid json');
+            state = new StateManager();
+            displayResult('Handle corrupted coin data', 
+                assertEqual(state.getCoins(), 0, 'Should default to 0 on corrupted data'));
+            
+            localStorage.clear();
+            
+            // Owned Abilities Tests
+            document.getElementById('results').innerHTML += '<h2>Owned Abilities Tests</h2>';
+            
+            state = new StateManager();
+            displayResult('Initialize with empty abilities', 
+                assertEqual(state.getOwnedAbilities(), [], 'Should have no abilities'));
+            
+            state.addAbility('STRONG_PUNCH');
+            displayResult('Add ability', 
+                assert(state.hasAbility('STRONG_PUNCH'), 'Should own STRONG_PUNCH'));
+            
+            let addResult = state.addAbility('STRONG_PUNCH');
+            displayResult('Reject duplicate ability', 
+                assert(!addResult, 'Should not add duplicate'));
+            
+            state.addAbility('FIRE_BALL');
+            displayResult('Add multiple abilities', 
+                assertEqual(state.getOwnedAbilities().length, 2, 'Should have 2 abilities'));
+            
+            // Test persistence
+            state = new StateManager();
+            displayResult('Persist abilities across instances', 
+                assert(state.hasAbility('STRONG_PUNCH') && state.hasAbility('FIRE_BALL'), 
+                    'Should load abilities from storage'));
+            
+            // Test corrupted data
+            localStorage.setItem('island_fighting_abilities', 'invalid json');
+            state = new StateManager();
+            displayResult('Handle corrupted abilities data', 
+                assertEqual(state.getOwnedAbilities(), [], 'Should default to empty array'));
+            
+            localStorage.clear();
+            
+            // Key Bindings Tests
+            document.getElementById('results').innerHTML += '<h2>Key Bindings Tests</h2>';
+            
+            state = new StateManager();
+            const defaultBindings = { z: null, x: null, c: null, v: null };
+            displayResult('Initialize with null bindings', 
+                assertEqual(state.getKeyBindings(), defaultBindings, 'Should have null bindings'));
+            
+            state.assignAbility('z', 'STRONG_PUNCH');
+            displayResult('Assign ability to key', 
+                assertEqual(state.getBinding('z'), 'STRONG_PUNCH', 'Should bind STRONG_PUNCH to z'));
+            
+            state.assignAbility('z', 'FIRE_BALL');
+            displayResult('Reassign ability to same key', 
+                assertEqual(state.getBinding('z'), 'FIRE_BALL', 'Should rebind to FIRE_BALL'));
+            
+            state.assignAbility('z', null);
+            displayResult('Clear binding', 
+                assertEqual(state.getBinding('z'), null, 'Should clear binding'));
+            
+            state.assignAbility('x', 'SHIELD');
+            state.assignAbility('c', 'TORNADO');
+            
+            // Test persistence
+            state = new StateManager();
+            displayResult('Persist bindings across instances', 
+                assert(state.getBinding('x') === 'SHIELD' && state.getBinding('c') === 'TORNADO', 
+                    'Should load bindings from storage'));
+            
+            // Test corrupted data
+            localStorage.setItem('island_fighting_bindings', 'invalid json');
+            state = new StateManager();
+            displayResult('Handle corrupted bindings data', 
+                assertEqual(state.getKeyBindings(), defaultBindings, 'Should default to null bindings'));
+            
+            localStorage.clear();
+            
+            // Purchase Ability Tests
+            document.getElementById('results').innerHTML += '<h2>Purchase Ability Tests</h2>';
+            
+            state = new StateManager();
+            state.addCoins(200);
+            let purchaseResult = state.purchaseAbility('STRONG_PUNCH', 100);
+            displayResult('Purchase ability with sufficient coins', 
+                assert(purchaseResult && state.getCoins() === 100 && state.hasAbility('STRONG_PUNCH'), 
+                    'Should purchase and deduct coins'));
+            
+            purchaseResult = state.purchaseAbility('FIRE_BALL', 400);
+            displayResult('Reject purchase with insufficient coins', 
+                assert(!purchaseResult && state.getCoins() === 100 && !state.hasAbility('FIRE_BALL'), 
+                    'Should not purchase'));
+            
+            purchaseResult = state.purchaseAbility('STRONG_PUNCH', 100);
+            displayResult('Reject duplicate purchase', 
+                assert(!purchaseResult && state.getCoins() === 100, 
+                    'Should not purchase already owned ability'));
+            
+            displaySummary();
+        };
+        
+        window.clearStorage = function() {
+            localStorage.clear();
+            alert('LocalStorage cleared!');
+        };
+        
+        // Auto-run tests on load
+        window.addEventListener('load', () => {
+            setTimeout(runAllTests, 100);
+        });
+    </script>
+</body>
+</html>
