@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Island Fighting Game</title>
-    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/main.css?v=2">
 </head>
 <body>
     <div id="scale-wrapper">
@@ -119,13 +119,7 @@
     </div>
     </div>
 
-    <script type="module">
-        // Cache buster: append current timestamp so browser always fetches latest JS
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.src = `js/main.js?v=${Date.now()}`;
-        document.body.appendChild(script);
-    </script>
+    <script type="module" src="js/main.js?v=2"></script>
     <script>
         // Scale game-container to fit screen while preserving 1000x600 aspect ratio
         const GAME_W = 1000, GAME_H = 600;
