@@ -73,7 +73,33 @@
                 <div class="control-item"><span class="key">Left Click</span> - Punch</div>
                 <div class="control-item"><span class="key">Z, X, C, V</span> - Use Abilities</div>
             </div>
+            <div class="mobile-toggle-row">
+                <span>Mobile Controls</span>
+                <button id="mobileToggleBtn" class="toggle-btn" data-enabled="false">OFF</button>
+            </div>
             <button id="controlsBackBtn" class="menu-btn back-btn">Back</button>
+        </div>
+
+        <!-- Mobile Controls Overlay (shown during gameplay) -->
+        <div id="mobileControls" class="mobile-controls hidden">
+            <!-- Left side: movement -->
+            <div class="mobile-left">
+                <button class="mob-btn" id="mobLeft">◀</button>
+                <button class="mob-btn" id="mobRight">▶</button>
+            </div>
+            <!-- Right side: abilities above, jump+punch below -->
+            <div class="mobile-right">
+                <div class="mob-abilities-row">
+                    <button class="mob-btn mob-ability" id="mobZ">Z</button>
+                    <button class="mob-btn mob-ability" id="mobX">X</button>
+                    <button class="mob-btn mob-ability" id="mobC">C</button>
+                    <button class="mob-btn mob-ability" id="mobV">V</button>
+                </div>
+                <div class="mob-actions-row">
+                    <button class="mob-btn mob-jump" id="mobJump">▲</button>
+                    <button class="mob-btn mob-punch" id="mobPunch">👊</button>
+                </div>
+            </div>
         </div>
 
         <!-- HUD (shown during gameplay) -->

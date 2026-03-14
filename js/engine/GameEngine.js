@@ -36,6 +36,11 @@ export class GameEngine {
         // Time scale for slow motion (1.0 = normal, 0.2 = slow)
         this.timeScale = 1.0;
         this.slowMotionEndTime = 0;
+
+        // Mobile controls state
+        this.mobileEnabled = false;
+        // Thunder targeting state (desktop: wait for click)
+        this.thunderTargeting = null;
         
         // Menu references
         this.mainMenu = document.getElementById('mainMenu');
@@ -47,6 +52,16 @@ export class GameEngine {
         this.hud = document.getElementById('hud');
         
         this.setupMenuListeners();
+
+        // Forward canvas touch taps into InputHandler (for thunder targeting on mobile)
+        this.canvas.addEventListener('touchstart', (e) => {
+            if (this.scene !== 'gameplay') return;
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            this.inputHandler.mouseX = touch.clientX;
+            this.inputHandler.mouseY = touch.clientY;
+            this.inputHandler.mouseClicked = true;
+        }, { passive: false });
         
         console.log('GameEngine constructed');
     }
@@ -116,6 +131,37 @@ export class GameEngine {
         document.getElementById('controlsBackBtn').addEventListener('click', () => {
             this.showMenu('main');
         });
+
+        // Mobile controls toggle
+        const mobileToggleBtn = document.getElementById('mobileToggleBtn');
+        mobileToggleBtn.addEventListener('click', () => {
+            const enabled = mobileToggleBtn.dataset.enabled === 'true';
+            const next = !enabled;
+            mobileToggleBtn.dataset.enabled = String(next);
+            mobileToggleBtn.textContent = next ? 'ON' : 'OFF';
+            this.mobileEnabled = next;
+            // Show/hide overlay if currently in gameplay
+            if (this.scene === 'gameplay') {
+                const overlay = document.getElementById('mobileControls');
+                if (next) overlay.classList.remove('hidden');
+                else overlay.classList.add('hidden');
+            }
+        });
+
+        // Wire mobile buttons to InputHandler
+        this._setupMobileButton('mobLeft',  'a',  false);
+        this._setupMobileButton('mobRight', 'd',  false);
+        this._setupMobileButton('mobJump',  ' ',  false);
+        this._setupMobileButton('mobZ',     'z',  false);
+        this._setupMobileButton('mobX',     'x',  false);
+        this._setupMobileButton('mobC',     'c',  false);
+        this._setupMobileButton('mobV',     'v',  false);
+
+        // Punch button fires a mouse click
+        const mobPunch = document.getElementById('mobPunch');
+        const firePunch = () => { this.inputHandler.mouseClicked = true; };
+        mobPunch.addEventListener('touchstart', (e) => { e.preventDefault(); firePunch(); }, { passive: false });
+        mobPunch.addEventListener('mousedown',  firePunch);
         
         // HP Upgrade buy button
         document.getElementById('buyHPBtn').addEventListener('click', () => {
@@ -132,6 +178,22 @@ export class GameEngine {
         });
     }
     
+    /**
+     * Wire a mobile button to simulate a key press/release in InputHandler
+     */
+    _setupMobileButton(id, key, _unused) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const press   = (e) => { e.preventDefault(); this.inputHandler.keys[key] = true; };
+        const release = (e) => { e.preventDefault(); this.inputHandler.keys[key] = false; };
+        btn.addEventListener('touchstart', press,   { passive: false });
+        btn.addEventListener('touchend',   release, { passive: false });
+        btn.addEventListener('touchcancel',release, { passive: false });
+        btn.addEventListener('mousedown',  press);
+        btn.addEventListener('mouseup',    release);
+        btn.addEventListener('mouseleave', release);
+    }
+
     showMenu(menuType) {
         // Hide all menus
         this.mainMenu.classList.remove('active');
@@ -141,6 +203,14 @@ export class GameEngine {
         this.codesMenu.classList.remove('active');
         this.controlsMenu.classList.remove('active');
         this.hud.classList.remove('active');
+
+        // Always hide mobile overlay when in a menu
+        document.getElementById('mobileControls').classList.add('hidden');
+        // Reset mobile ability buttons to default state
+        ['Z','X','C','V'].forEach(k => {
+            const btn = document.getElementById('mob' + k);
+            if (btn) { btn.textContent = k; btn.style.background = ''; btn.style.borderColor = ''; btn.style.opacity = ''; }
+        });
         
         // Show requested menu
         switch (menuType) {
@@ -469,6 +539,11 @@ export class GameEngine {
         
         // Show HUD
         this.hud.classList.add('active');
+
+        // Show mobile overlay if enabled
+        const overlay = document.getElementById('mobileControls');
+        if (this.mobileEnabled) overlay.classList.remove('hidden');
+        else overlay.classList.add('hidden');
         
         // Set scene to gameplay
         this.scene = 'gameplay';
@@ -568,6 +643,9 @@ export class GameEngine {
     showGameOver() {
         console.log('Game Over');
         
+        // Hide mobile overlay when returning to menu
+        document.getElementById('mobileControls').classList.add('hidden');
+        
         // TODO: Display game over screen with stats (Task 23.3)
         // For now, just return to main menu
         this.showMenu('main');
@@ -609,24 +687,49 @@ export class GameEngine {
         if (this.player && this.island) {
             this.player.update(deltaTime, this.inputHandler, this.island);
             
-            // Handle punch attack
+            // Handle punch attack (or confirm thunder targeting on desktop)
             if (this.inputHandler.consumeMouseClick()) {
-                const punchHitbox = this.player.punch();
-                if (punchHitbox) {
-                    // Check collision with bots
-                    for (let i = this.bots.length - 1; i >= 0; i--) {
-                        const bot = this.bots[i];
-                        if (this.checkCollision(punchHitbox, bot)) {
-                            const defeated = bot.takeDamage(punchHitbox.damage);
-                            // Knockback bot away from player
-                            const kbDir = bot.x + bot.width / 2 > this.player.x + this.player.width / 2 ? 1 : -1;
-                            bot.applyKnockback(kbDir * 8, -4);
-                            if (defeated) {
-                                // Award coins
-                                this.stateManager.addCoins(bot.coinReward);
-                                // Remove bot
-                                this.bots.splice(i, 1);
-                                console.log(`Bot defeated! +${bot.coinReward} coins`);
+                if (this.thunderTargeting) {
+                    // Fire thunder at clicked position
+                    const { key } = this.thunderTargeting;
+                    this.thunderTargeting = null;
+                    const mouse = this.inputHandler.getMousePosition();
+                    const rect = this.canvas.getBoundingClientRect();
+                    this.player.thunderTargetX = mouse.x - rect.left;
+                    this.player.thunderTargetY = mouse.y - rect.top;
+                    const result = this.player.useAbility(key);
+                    if (result && result.type === 'THUNDER') {
+                        const tx = result.x, ty = result.y, r = result.radius;
+                        for (let i = this.bots.length - 1; i >= 0; i--) {
+                            const bot = this.bots[i];
+                            if (Math.abs((bot.x + bot.width / 2) - tx) <= r) {
+                                const defeated = bot.takeDamage(result.damage);
+                                if (defeated) {
+                                    this.stateManager.addCoins(bot.coinReward);
+                                    this.bots.splice(i, 1);
+                                }
+                            }
+                        }
+                        this.thunderEffect = { x: tx, elapsed: 0, duration: 0.5, canvasHeight: this.canvas.height };
+                    }
+                } else {
+                    const punchHitbox = this.player.punch();
+                    if (punchHitbox) {
+                        // Check collision with bots
+                        for (let i = this.bots.length - 1; i >= 0; i--) {
+                            const bot = this.bots[i];
+                            if (this.checkCollision(punchHitbox, bot)) {
+                                const defeated = bot.takeDamage(punchHitbox.damage);
+                                // Knockback bot away from player
+                                const kbDir = bot.x + bot.width / 2 > this.player.x + this.player.width / 2 ? 1 : -1;
+                                bot.applyKnockback(kbDir * 8, -4);
+                                if (defeated) {
+                                    // Award coins
+                                    this.stateManager.addCoins(bot.coinReward);
+                                    // Remove bot
+                                    this.bots.splice(i, 1);
+                                    console.log(`Bot defeated! +${bot.coinReward} coins`);
+                                }
                             }
                         }
                     }
@@ -636,13 +739,18 @@ export class GameEngine {
             // Handle ability activation (Z, X, C, V keys)
             ['z', 'x', 'c', 'v'].forEach(key => {
                 if (this.inputHandler.isKeyPressed(key)) {
-                    // Inject mouse position for Thunder ability
+                    // Thunder targeting mode (both desktop and mobile: wait for a tap/click)
                     if (this.player.abilities[key] === 'THUNDER') {
-                        const mouse = this.inputHandler.getMousePosition();
-                        const rect = this.canvas.getBoundingClientRect();
-                        this.player.thunderTargetX = mouse.x - rect.left;
-                        this.player.thunderTargetY = mouse.y - rect.top;
-                    }                    const result = this.player.useAbility(key);
+                        if (!this.thunderTargeting) {
+                            this.thunderTargeting = { key };
+                            return; // don't fire yet — wait for tap/click
+                        } else if (this.thunderTargeting.key === key) {
+                            // Press again to cancel
+                            this.thunderTargeting = null;
+                            return;
+                        }
+                    }
+                    const result = this.player.useAbility(key);
                     if (result) {
                         console.log(`Activated ability: ${result.type}`);
                         
@@ -881,6 +989,31 @@ export class GameEngine {
             this.ctx.restore();
         }
         
+        // Render thunder targeting crosshair (desktop targeting mode)
+        if (this.thunderTargeting) {
+            const mouse = this.inputHandler.getMousePosition();
+            const rect = this.canvas.getBoundingClientRect();
+            const mx = mouse.x - rect.left;
+            const my = mouse.y - rect.top;
+            const ctx = this.ctx;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 255, 100, 0.9)';
+            ctx.lineWidth = 2;
+            const r = 20;
+            ctx.beginPath();
+            ctx.arc(mx, my, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(mx - r - 6, my); ctx.lineTo(mx + r + 6, my);
+            ctx.moveTo(mx, my - r - 6); ctx.lineTo(mx, my + r + 6);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 255, 100, 0.85)';
+            ctx.font = 'bold 13px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('CLICK TO STRIKE', mx, my - r - 10);
+            ctx.restore();
+        }
+
         // Update HUD
         this.updateHUD();
         
@@ -907,8 +1040,7 @@ export class GameEngine {
      */
     renderAbilityCooldowns() {
         if (!this.player) return;
-        
-        const ctx = this.ctx;
+
         const keys = ['z', 'x', 'c', 'v'];
         const abilityNames = {
             'STRONG_PUNCH': 'Strong',
@@ -922,7 +1054,6 @@ export class GameEngine {
             'FLY': 'Fly',
             'SLOW_MOTION': 'SlowMo'
         };
-        
         const abilityColors = {
             'STRONG_PUNCH': '#FF0000',
             'FIRE_BALL': '#FF4500',
@@ -935,64 +1066,88 @@ export class GameEngine {
             'FLY': '#64C8FF',
             'SLOW_MOTION': '#AAAACC'
         };
-        
+
+        if (this.mobileEnabled) {
+            // Update mobile buttons to show cooldown state
+            keys.forEach(key => {
+                const btn = document.getElementById('mob' + key.toUpperCase());
+                if (!btn) return;
+                const abilityType = this.player.abilities[key];
+                const cooldown = this.player.abilityCooldowns[key] || 0;
+
+                if (abilityType) {
+                    const color = abilityColors[abilityType] || '#4CAF50';
+                    const name = abilityNames[abilityType] || key.toUpperCase();
+                    if (cooldown > 0) {
+                        const pct = cooldown / this.getAbilityMaxCooldown(abilityType);
+                        btn.style.background = `linear-gradient(to top, ${color}88 ${Math.round((1 - pct) * 100)}%, rgba(0,0,0,0.7) ${Math.round((1 - pct) * 100)}%)`;
+                        btn.style.borderColor = color;
+                        btn.textContent = Math.ceil(cooldown);
+                        btn.style.opacity = '0.6';
+                    } else {
+                        btn.style.background = color + 'AA';
+                        btn.style.borderColor = color;
+                        btn.textContent = name;
+                        btn.style.opacity = '1';
+                    }
+                } else {
+                    btn.style.background = 'rgba(76, 175, 80, 0.5)';
+                    btn.style.borderColor = '#4CAF50';
+                    btn.textContent = key.toUpperCase();
+                    btn.style.opacity = '0.4';
+                }
+            });
+            return; // skip canvas drawing
+        }
+
+        // Desktop: draw canvas cooldown boxes
+        const ctx = this.ctx;
         const boxSize = 60;
         const gap = 10;
         const startX = this.canvas.width - (boxSize + gap);
         const startY = this.canvas.height - (boxSize * 4 + gap * 5);
-        
+
         ctx.imageSmoothingEnabled = false;
-        
+
         keys.forEach((key, index) => {
             const abilityType = this.player.abilities[key];
             const cooldown = this.player.abilityCooldowns[key];
-            
+
             const x = startX;
             const y = startY + (index * (boxSize + gap));
-            
-            // Draw box background
+
             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
             ctx.fillRect(x, y, boxSize, boxSize);
-            
-            // Draw border
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 2;
             ctx.strokeRect(x, y, boxSize, boxSize);
-            
+
             if (abilityType) {
-                // Draw ability color indicator
                 ctx.fillStyle = abilityColors[abilityType] || '#888';
                 ctx.fillRect(x + 4, y + 4, boxSize - 8, boxSize - 8);
-                
-                // Draw cooldown overlay if on cooldown
+
                 if (cooldown > 0) {
                     const cooldownPercent = cooldown / this.getAbilityMaxCooldown(abilityType);
                     const overlayHeight = (boxSize - 8) * cooldownPercent;
-                    
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                     ctx.fillRect(x + 4, y + 4, boxSize - 8, overlayHeight);
-                    
-                    // Draw cooldown text
                     ctx.fillStyle = '#fff';
                     ctx.font = 'bold 16px Courier New';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(Math.ceil(cooldown).toString(), x + boxSize / 2, y + boxSize / 2);
                 }
-                
-                // Draw ability name
+
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 10px Courier New';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
                 ctx.fillText(abilityNames[abilityType] || '', x + boxSize / 2, y + boxSize - 4);
             } else {
-                // Empty slot
                 ctx.fillStyle = '#444';
                 ctx.fillRect(x + 4, y + 4, boxSize - 8, boxSize - 8);
             }
-            
-            // Draw key label
+
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 12px Courier New';
             ctx.textAlign = 'center';
