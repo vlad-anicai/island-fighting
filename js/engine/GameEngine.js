@@ -168,6 +168,9 @@ export class GameEngine {
         const firePunch = () => { this.inputHandler.mouseClicked = true; };
         mobPunch.addEventListener('touchstart', (e) => { e.preventDefault(); firePunch(); }, { passive: false });
         mobPunch.addEventListener('mousedown',  firePunch);
+
+        // Block button holds F key
+        this._setupMobileButton('mobBlock', 'f', false);
         
         // HP Upgrade buy button
         document.getElementById('buyHPBtn').addEventListener('click', () => {
@@ -268,11 +271,13 @@ export class GameEngine {
             { type: 'FIRE_BLAST', name: 'Fire Blast', cost: 600, description: 'Close-range fire particle punch' },
             { type: 'SHIELD', name: 'Shield', cost: 750, description: 'Temporary invincibility' },
             { type: 'EARTHQUAKE', name: 'Earthquake', cost: 850, description: 'Stuns all enemies for 3s' },
+            { type: 'BOMB', name: 'Bomb', cost: 900, description: 'Thrown grenade that arcs and explodes in a large radius' },
             { type: 'TORNADO', name: 'Tornado', cost: 1000, description: 'Area damage attack' },
             { type: 'THUNDER', name: 'Thunder Strike', cost: 1200, description: 'Lightning bolt at mouse position' },
             { type: 'CONTROLLED_FIRE_BALL', name: 'Controlled Fire Ball', cost: 1500, description: 'Homing fireball that follows your cursor' },
             { type: 'FLY', name: 'Fly', cost: 1800, description: 'Fly freely with W/S for 8 seconds' },
-            { type: 'SLOW_MOTION', name: 'Slow Motion', cost: 2000, description: 'Slows all enemies for 5 seconds' }
+            { type: 'SLOW_MOTION', name: 'Slow Motion', cost: 2000, description: 'Slows all enemies for 5 seconds' },
+            { type: 'PLASMA_LASER', name: 'Plasma Laser', cost: 1600, description: 'Fast piercing beam that passes through all enemies' }
         ];
         
         // Get ability list container
@@ -362,7 +367,9 @@ export class GameEngine {
             'THUNDER': 'Thunder Strike',
             'CONTROLLED_FIRE_BALL': 'Controlled Fire Ball',
             'FLY': 'Fly',
-            'SLOW_MOTION': 'Slow Motion'
+            'SLOW_MOTION': 'Slow Motion',
+            'PLASMA_LASER': 'Plasma Laser',
+            'BOMB': 'Bomb'
         };
         
         keys.forEach(key => {
@@ -928,6 +935,36 @@ export class GameEngine {
                 proj.targetY = (mouse.y - rect.top)  * scaleY;
             }
 
+            // Bomb: explode when it hits the island ground
+            if (proj.type === 'BOMB' && !proj.exploded && this.island) {
+                const groundY = this.island.y - proj.height;
+                if (proj.y >= groundY) {
+                    proj.y = groundY;
+                    proj.exploded = true;
+                    proj.velocityX = 0;
+                    proj.velocityY = 0;
+                    // AoE damage to all bots within explosion radius
+                    const cx = proj.x + proj.width / 2;
+                    const cy = proj.y + proj.height / 2;
+                    for (let j = this.bots.length - 1; j >= 0; j--) {
+                        const bot = this.bots[j];
+                        const bx = bot.x + bot.width / 2;
+                        const by = bot.y + bot.height / 2;
+                        const dist = Math.sqrt((bx - cx) ** 2 + (by - cy) ** 2);
+                        if (dist <= proj.explosionRadius) {
+                            const defeated = bot.takeDamage(proj.damage);
+                            // Knockback away from explosion center
+                            const kbDir = bx > cx ? 1 : -1;
+                            bot.applyKnockback(kbDir * 10, -8);
+                            if (defeated) {
+                                this.stateManager.addCoins(bot.coinReward);
+                                this.bots.splice(j, 1);
+                            }
+                        }
+                    }
+                }
+            }
+
             proj.update(worldDelta);
             
             // Remove inactive projectiles
@@ -936,7 +973,8 @@ export class GameEngine {
                 continue;
             }
             
-            // Check collision with bots
+            // Check collision with bots (skip bomb — it uses AoE explosion on landing)
+            if (proj.type === 'BOMB') continue;
             for (let j = this.bots.length - 1; j >= 0; j--) {
                 const bot = this.bots[j];
                 if (this.checkCollision(proj, bot)) {
@@ -953,6 +991,12 @@ export class GameEngine {
                         if (proj.elapsed - lastHit < 0.5) continue;
                         proj.hitCooldowns.set(j, proj.elapsed);
                     }
+                    // Plasma Laser pierces all — hits each bot only once
+                    if (proj.type === 'PLASMA_LASER') {
+                        if (!proj.hitBots) proj.hitBots = new Set();
+                        if (proj.hitBots.has(j)) continue;
+                        proj.hitBots.add(j);
+                    }
                     const defeated = bot.takeDamage(proj.damage);
                     if (defeated) {
                         this.stateManager.addCoins(bot.coinReward);
@@ -960,7 +1004,7 @@ export class GameEngine {
                         if (proj.hitBots) proj.hitBots.delete(j);
                         if (proj.hitCooldowns) proj.hitCooldowns.delete(j);
                     }
-                    // Fire Ball stops on hit; Tornado and Controlled Fire Ball pass through
+                    // Fire Ball stops on hit; Tornado, Controlled Fire Ball, and Plasma Laser pass through
                     if (proj.type === 'FIRE_BALL') {
                         proj.active = false;
                     }
@@ -1136,7 +1180,9 @@ export class GameEngine {
             'THUNDER': 'Thunder',
             'CONTROLLED_FIRE_BALL': 'C.Fire',
             'FLY': 'Fly',
-            'SLOW_MOTION': 'SlowMo'
+            'SLOW_MOTION': 'SlowMo',
+            'PLASMA_LASER': 'Plasma',
+            'BOMB': 'Bomb'
         };
         const abilityColors = {
             'STRONG_PUNCH': '#FF0000',
@@ -1148,7 +1194,9 @@ export class GameEngine {
             'THUNDER': '#FFFF00',
             'CONTROLLED_FIRE_BALL': '#FF8800',
             'FLY': '#64C8FF',
-            'SLOW_MOTION': '#AAAACC'
+            'SLOW_MOTION': '#AAAACC',
+            'PLASMA_LASER': '#00FFEE',
+            'BOMB': '#888800'
         };
 
         if (this.mobileEnabled) {
@@ -1316,7 +1364,9 @@ export class GameEngine {
             'THUNDER': 10.0,
             'CONTROLLED_FIRE_BALL': 12.0,
             'FLY': 20.0,
-            'SLOW_MOTION': 25.0
+            'SLOW_MOTION': 25.0,
+            'PLASMA_LASER': 15.0,
+            'BOMB': 12.0
         };
         return cooldowns[abilityType] || 1.0;
     }

@@ -27,6 +27,19 @@ class Projectile {
       this.speed = 7;       // homing speed
       this.targetX = x;     // updated each frame by GameEngine
       this.targetY = y;
+    } else if (type === 'PLASMA_LASER') {
+      this.width = 16;
+      this.height = 16;
+      this.lifetime = 2.0;
+    } else if (type === 'BOMB') {
+      this.width = 18;
+      this.height = 18;
+      this.gravity = 0.4;
+      this.exploded = false;
+      this.explosionRadius = 100;
+      this.explosionElapsed = 0;
+      this.explosionDuration = 0.5;
+      this.lifetime = 4.0;
     }
   }
 
@@ -37,9 +50,8 @@ class Projectile {
       const dy = this.targetY - (this.y + this.height / 2);
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist > 2) {
-        this.velocityX += (dx / dist) * 1.2; // gradual steering
+        this.velocityX += (dx / dist) * 1.2;
         this.velocityY += (dy / dist) * 1.2;
-        // Cap speed
         const spd = Math.sqrt(this.velocityX ** 2 + this.velocityY ** 2);
         if (spd > this.speed) {
           this.velocityX = (this.velocityX / spd) * this.speed;
@@ -47,6 +59,20 @@ class Projectile {
         }
       }
     }
+
+    if (this.type === 'BOMB') {
+      if (this.exploded) {
+        // Animate explosion, then deactivate
+        this.explosionElapsed += deltaTime;
+        if (this.explosionElapsed >= this.explosionDuration) {
+          this.active = false;
+        }
+        return; // don't move while exploding
+      }
+      // Apply gravity so it arcs
+      this.velocityY += this.gravity;
+    }
+
     this.x += this.velocityX;
     this.y += this.velocityY;
     this.elapsed += deltaTime;
@@ -65,6 +91,10 @@ class Projectile {
       this.renderTornado(ctx);
     } else if (this.type === 'CONTROLLED_FIRE_BALL') {
       this.renderControlledFireBall(ctx);
+    } else if (this.type === 'PLASMA_LASER') {
+      this.renderPlasmaLaser(ctx);
+    } else if (this.type === 'BOMB') {
+      this.renderBomb(ctx);
     }
   }
   
@@ -125,8 +155,132 @@ class Projectile {
       ctx.fillRect(px - 2, py - 2, 4, 4);
     }
   }
-  renderControlledFireBall(ctx) {
+  renderBomb(ctx) {
     const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+
+    if (this.exploded) {
+      // Explosion animation
+      const progress = this.explosionElapsed / this.explosionDuration;
+      const alpha = 1 - progress;
+      const r = this.explosionRadius * (0.3 + progress * 0.7);
+
+      // Outer shockwave ring
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 200, 50, ${alpha * 0.6})`;
+      ctx.lineWidth = 6 * (1 - progress);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Fireball
+      const fireGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 0.7);
+      fireGrad.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
+      fireGrad.addColorStop(0.3, `rgba(255, 180, 0, ${alpha * 0.9})`);
+      fireGrad.addColorStop(0.7, `rgba(255, 60, 0, ${alpha * 0.6})`);
+      fireGrad.addColorStop(1, `rgba(100, 0, 0, 0)`);
+      ctx.fillStyle = fireGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Debris sparks
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2 + progress * 3;
+        const dist = r * 0.8 * progress;
+        ctx.fillStyle = `rgba(255, ${150 + i * 10}, 0, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist, 4 * (1 - progress), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+
+    // Fuse flicker
+    const fuseAlpha = Math.sin(this.elapsed * 20) * 0.5 + 0.5;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 10, 10, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bomb body
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shine
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.arc(cx - 3, cy - 3, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Fuse
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + 2, cy - 9);
+    ctx.quadraticCurveTo(cx + 8, cy - 18, cx + 4, cy - 22);
+    ctx.stroke();
+
+    // Fuse spark
+    ctx.fillStyle = `rgba(255, 220, 50, ${fuseAlpha})`;
+    ctx.beginPath();
+    ctx.arc(cx + 4, cy - 22, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(255, 100, 0, ${fuseAlpha * 0.7})`;
+    ctx.beginPath();
+    ctx.arc(cx + 4, cy - 22, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  renderPlasmaLaser(ctx) {
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const t = this.elapsed;
+    const pulse = Math.sin(t * 30) * 0.3 + 1;
+
+    // Direction of travel
+    const angle = Math.atan2(this.velocityY, this.velocityX);
+    const trailLen = 60;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+
+    // Outer glow trail
+    const outerGrad = ctx.createLinearGradient(-trailLen, 0, 16, 0);
+    outerGrad.addColorStop(0, 'rgba(180, 0, 255, 0)');
+    outerGrad.addColorStop(0.5, 'rgba(180, 0, 255, 0.4)');
+    outerGrad.addColorStop(1, 'rgba(0, 255, 255, 0.6)');
+    ctx.fillStyle = outerGrad;
+    ctx.fillRect(-trailLen, -10 * pulse, trailLen + 16, 20 * pulse);
+
+    // Core beam trail
+    const coreGrad = ctx.createLinearGradient(-trailLen, 0, 16, 0);
+    coreGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    coreGrad.addColorStop(0.6, 'rgba(0, 255, 255, 0.9)');
+    coreGrad.addColorStop(1, 'rgba(255, 255, 255, 1)');
+    ctx.fillStyle = coreGrad;
+    ctx.fillRect(-trailLen, -4, trailLen + 16, 8);
+
+    // Bright tip
+    const tipGrad = ctx.createRadialGradient(8, 0, 0, 8, 0, 14 * pulse);
+    tipGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    tipGrad.addColorStop(0.4, 'rgba(0, 255, 255, 0.9)');
+    tipGrad.addColorStop(1, 'rgba(180, 0, 255, 0)');
+    ctx.fillStyle = tipGrad;
+    ctx.beginPath();
+    ctx.arc(8, 0, 14 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  renderControlledFireBall(ctx) {    const cx = this.x + this.width / 2;
     const cy = this.y + this.height / 2;
     const pulse = Math.sin(this.elapsed * 15) * 0.15 + 1;
     const r = (this.width / 2) * pulse;

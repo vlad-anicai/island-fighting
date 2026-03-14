@@ -15,7 +15,8 @@ export class InputHandler {
             'z': false,
             'x': false,
             'c': false,
-            'v': false
+            'v': false,
+            'f': false
         };
         
         // Track mouse state

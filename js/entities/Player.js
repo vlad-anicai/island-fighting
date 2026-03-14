@@ -45,6 +45,14 @@ class Player {
     // Fly ability
     this.flying = false;
     this.flyEndTime = 0;
+
+    // Block mechanic
+    this.blocking = false;
+    this.blockMeter = 100;
+    this.maxBlockMeter = 100;
+    this.blockDrainRate = 25;   // meter drained per second while holding block
+    this.blockRegenRate = 15;   // meter regained per second when not blocking
+    this.blockBroken = false;   // true when meter hits 0 — must fully regen before blocking again
     
     // Abilities
     this.abilities = {
@@ -136,6 +144,28 @@ class Player {
       this.velocityX = 0;
     }
     
+    // Handle block (F key)
+    const wantsBlock = input.isKeyPressed('f');
+    if (wantsBlock && !this.blockBroken && this.blockMeter > 0) {
+      this.blocking = true;
+      this.blockMeter -= this.blockDrainRate * deltaTime;
+      if (this.blockMeter <= 0) {
+        this.blockMeter = 0;
+        this.blocking = false;
+        this.blockBroken = true; // guard break — must fully regen
+      }
+    } else {
+      this.blocking = false;
+      // Regen meter when not blocking
+      if (this.blockMeter < this.maxBlockMeter) {
+        this.blockMeter += this.blockRegenRate * deltaTime;
+        if (this.blockMeter >= this.maxBlockMeter) {
+          this.blockMeter = this.maxBlockMeter;
+          this.blockBroken = false; // fully recharged, can block again
+        }
+      }
+    }
+
     // Update cooldowns
     if (this.punchCooldown > 0) {
       this.punchCooldown -= deltaTime;
@@ -176,7 +206,17 @@ class Player {
     if (this.shieldActive) {
       return; // Shield blocks all damage
     }
-    
+
+    if (this.blocking && this.blockMeter > 0) {
+      // Block absorbs the hit — drain meter proportional to damage
+      this.blockMeter = Math.max(0, this.blockMeter - amount * 0.5);
+      if (this.blockMeter <= 0) {
+        this.blockBroken = true;
+        this.blocking = false;
+      }
+      return; // no HP damage while blocking
+    }
+
     this.hp = Math.max(0, this.hp - amount);
   }
   
@@ -286,6 +326,16 @@ class Player {
       case 'SLOW_MOTION':
         result = this.activateSlowMotion();
         this.abilityCooldowns[key] = 25.0;
+        break;
+
+      case 'PLASMA_LASER':
+        result = this.activatePlasmaLaser();
+        this.abilityCooldowns[key] = 15.0;
+        break;
+
+      case 'BOMB':
+        result = this.activateBomb();
+        this.abilityCooldowns[key] = 12.0;
         break;
     }
     
@@ -400,6 +450,42 @@ class Player {
     this.flyEndTime = Date.now() + 8000; // 8 seconds
     this.velocityY = -3; // initial lift
     return { type: 'FLY' };
+  }
+
+  /**
+   * Activates Bomb — arcing grenade that explodes on landing
+   */
+  activateBomb() {
+    const throwSpeed = this.facingRight ? 7 : -7;
+    return {
+      type: 'BOMB',
+      projectile: {
+        type: 'BOMB',
+        x: this.facingRight ? this.x + this.width : this.x - 18,
+        y: this.y + 4,
+        velocityX: throwSpeed,
+        velocityY: -10, // arc upward
+        damage: 45
+      }
+    };
+  }
+
+  /**
+   * Activates Plasma Laser — fast piercing beam in facing direction
+   */
+  activatePlasmaLaser() {
+    const speed = 18;
+    return {
+      type: 'PLASMA_LASER',
+      projectile: {
+        type: 'PLASMA_LASER',
+        x: this.facingRight ? this.x + this.width : this.x - 16,
+        y: this.y + this.height / 2 - 8,
+        velocityX: this.facingRight ? speed : -speed,
+        velocityY: 0,
+        damage: 120
+      }
+    };
   }
 
   /**
@@ -736,6 +822,34 @@ class Player {
       ctx.fillRect(headX - 2, headY - 8, headW + 4, 4);
       ctx.fillStyle = `rgba(100, 200, 255, 0.9)`;
       ctx.fillRect(headX - 2, headY - 8, (headW + 4) * remaining, 4);
+    }
+
+    // --- BLOCK METER ---
+    // Show whenever meter is not full or player is blocking
+    if (this.blockMeter < this.maxBlockMeter || this.blocking) {
+      const barW = 36;
+      const barH = 5;
+      const barX = cx - barW / 2;
+      const barY = headY - 16;
+      const pct = this.blockMeter / this.maxBlockMeter;
+
+      // Background
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+
+      // Fill — blue when healthy, red when broken/low
+      const barColor = this.blockBroken
+        ? '#FF3333'
+        : pct > 0.4 ? '#3399FF' : '#FF8800';
+      ctx.fillStyle = barColor;
+      ctx.fillRect(barX, barY, barW * pct, barH);
+
+      // Blocking indicator glow
+      if (this.blocking) {
+        ctx.strokeStyle = 'rgba(100, 180, 255, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX - 1, barY - 1, barW + 2, barH + 2);
+      }
     }
 
     // --- SHIELD EFFECT ---
