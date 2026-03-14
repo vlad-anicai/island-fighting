@@ -17,13 +17,13 @@ class Bot {
     // Level-scaled stats
     this.hp = 50 + (level * 10);
     this.maxHp = this.hp;
-    this.size = 40 + (level * 3); // Made bigger (was 24 + level * 2)
+    this.size = 40 + (level * 3);
     this.width = this.size;
     this.height = this.size;
     
     // Combat stats
     this.speed = 2;
-    this.contactDamage = 10; // Takes 15 hits to kill player (150 HP / 10 damage)
+    this.contactDamage = 10;
     this.coinReward = 5;
     
     // Status effects
@@ -35,6 +35,11 @@ class Bot {
     this.velocityY = 0;
     this.gravity = 0.5;
     this.isGrounded = false;
+
+    // Visual type: 'robot' or 'dog' (random)
+    this.botType = Math.random() < 0.5 ? 'robot' : 'dog';
+    // Walk animation
+    this.walkFrame = 0;
   }
   
   /**
@@ -44,6 +49,11 @@ class Bot {
    * @param {Island} island - The island platform
    */
   update(deltaTime, playerPos, island, timeScale = 1.0) {
+    // Advance walk animation
+    if (!this.stunned && Math.abs(this.velocityX) > 0.1) {
+      this.walkFrame += 0.15;
+    }
+
     // Check if stun has expired
     if (this.stunned && Date.now() >= this.stunEndTime) {
       this.stunned = false;
@@ -138,57 +148,163 @@ class Bot {
    */
   render(ctx) {
     ctx.imageSmoothingEnabled = false;
-    
-    // Draw bot body (red, or gray if stunned)
-    ctx.fillStyle = this.stunned ? '#808080' : '#DC143C';
-    ctx.fillRect(this.x, this.y, this.width, this.height);
-    
-    // Draw eyes (yellow, or white if stunned)
-    ctx.fillStyle = this.stunned ? '#FFFFFF' : '#FFD700';
-    const eyeSize = Math.max(3, this.size / 8);
-    ctx.fillRect(this.x + this.width * 0.25, this.y + this.height * 0.3, eyeSize, eyeSize);
-    ctx.fillRect(this.x + this.width * 0.65, this.y + this.height * 0.3, eyeSize, eyeSize);
-    
-    // Draw stun stars if stunned
-    if (this.stunned) {
+    ctx.save();
+
+    const s = this.size;
+    const x = this.x;
+    const y = this.y;
+    const stunned = this.stunned;
+    const facing = this.velocityX >= 0 ? 1 : -1; // 1=right, -1=left
+    const walk = Math.sin(this.walkFrame) * 3; // leg swing
+
+    if (this.botType === 'robot') {
+      this._drawRobot(ctx, x, y, s, stunned, facing, walk);
+    } else {
+      this._drawDog(ctx, x, y, s, stunned, facing, walk);
+    }
+
+    // Stun stars
+    if (stunned) {
       const time = Date.now() / 200;
       for (let i = 0; i < 3; i++) {
         const angle = (time + i * 120) * Math.PI / 180;
-        const radius = this.width * 0.6;
-        const sx = this.x + this.width / 2 + Math.cos(angle) * radius;
-        const sy = this.y - 10 + Math.sin(angle) * 10;
-        
+        const sx = x + s / 2 + Math.cos(angle) * s * 0.55;
+        const sy = y - 10 + Math.sin(angle) * 8;
         ctx.fillStyle = '#FFD700';
         ctx.beginPath();
         for (let j = 0; j < 5; j++) {
-          const starAngle = (j * 4 * Math.PI) / 5 - Math.PI / 2;
-          const starRadius = j % 2 === 0 ? 5 : 2.5;
-          const x = sx + Math.cos(starAngle) * starRadius;
-          const y = sy + Math.sin(starAngle) * starRadius;
-          if (j === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
+          const a = (j * 4 * Math.PI) / 5 - Math.PI / 2;
+          const r = j % 2 === 0 ? 5 : 2.5;
+          j === 0 ? ctx.moveTo(sx + Math.cos(a)*r, sy + Math.sin(a)*r)
+                  : ctx.lineTo(sx + Math.cos(a)*r, sy + Math.sin(a)*r);
         }
         ctx.closePath();
         ctx.fill();
       }
     }
-    
-    // Draw HP bar
-    const barWidth = this.width;
-    const barHeight = 4;
-    const barY = this.y - 8;
-    
-    // Background (red)
+
+    // HP bar
+    const barY = y - 8;
     ctx.fillStyle = '#8B0000';
-    ctx.fillRect(this.x, barY, barWidth, barHeight);
-    
-    // HP (green)
-    const hpPercent = this.hp / this.maxHp;
+    ctx.fillRect(x, barY, s, 4);
     ctx.fillStyle = '#00FF00';
-    ctx.fillRect(this.x, barY, barWidth * hpPercent, barHeight);
+    ctx.fillRect(x, barY, s * (this.hp / this.maxHp), 4);
+
+    ctx.restore();
+  }
+
+  _drawRobot(ctx, x, y, s, stunned, facing, walk) {
+    const metal  = stunned ? '#888' : '#4488CC';
+    const dark   = stunned ? '#555' : '#224466';
+    const accent = stunned ? '#aaa' : '#88DDFF';
+    const eye    = stunned ? '#fff' : '#FF4400';
+
+    const u = s / 10; // unit
+
+    // Legs (animated)
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + u*2,           y + u*7 + walk,  u*2, u*3);
+    ctx.fillRect(x + u*6,           y + u*7 - walk,  u*2, u*3);
+    // Feet
+    ctx.fillStyle = metal;
+    ctx.fillRect(x + u*1.5,         y + u*9.5 + walk, u*3, u*1);
+    ctx.fillRect(x + u*5.5,         y + u*9.5 - walk, u*3, u*1);
+
+    // Torso
+    ctx.fillStyle = metal;
+    ctx.fillRect(x + u*1.5, y + u*3.5, u*7, u*4);
+    // Chest panel
+    ctx.fillStyle = accent;
+    ctx.fillRect(x + u*3,   y + u*4.5, u*4, u*2);
+    // Chest light
+    ctx.fillStyle = stunned ? '#aaa' : '#FF0000';
+    ctx.fillRect(x + u*4.5, y + u*5,   u*1, u*1);
+
+    // Arms (animated opposite to legs)
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + u*0,   y + u*4 - walk*0.5, u*1.5, u*3);
+    ctx.fillRect(x + u*8.5, y + u*4 + walk*0.5, u*1.5, u*3);
+    // Fists
+    ctx.fillStyle = metal;
+    ctx.fillRect(x - u*0.5, y + u*6.5 - walk*0.5, u*2, u*1.5);
+    ctx.fillRect(x + u*8.5, y + u*6.5 + walk*0.5, u*2, u*1.5);
+
+    // Head
+    ctx.fillStyle = metal;
+    ctx.fillRect(x + u*2, y + u*0.5, u*6, u*3.5);
+    // Visor
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + u*2.5, y + u*1,  u*5, u*1.5);
+    // Eyes
+    ctx.fillStyle = eye;
+    ctx.fillRect(x + u*3,   y + u*1.2, u*1.5, u*1);
+    ctx.fillRect(x + u*5.5, y + u*1.2, u*1.5, u*1);
+    // Antenna
+    ctx.fillStyle = accent;
+    ctx.fillRect(x + u*4.5, y - u*1,   u*1, u*1.5);
+    ctx.fillStyle = '#FF4400';
+    ctx.fillRect(x + u*4.5, y - u*1.5, u*1, u*0.8);
+  }
+
+  _drawDog(ctx, x, y, s, stunned, facing, walk) {
+    const fur    = stunned ? '#888' : '#CC6622';
+    const dark   = stunned ? '#555' : '#883300';
+    const metal  = stunned ? '#aaa' : '#AAAACC';
+    const eye    = stunned ? '#fff' : '#FF4400';
+
+    const u = s / 10;
+
+    // Tail (wags with walk)
+    ctx.fillStyle = fur;
+    ctx.save();
+    ctx.translate(facing > 0 ? x + u*1 : x + u*9, y + u*3);
+    ctx.rotate(Math.sin(this.walkFrame) * 0.5);
+    ctx.fillRect(facing > 0 ? -u*3 : 0, -u*1, u*3, u*1.5);
+    ctx.restore();
+
+    // Body
+    ctx.fillStyle = fur;
+    ctx.fillRect(x + u*1.5, y + u*3, u*7, u*4);
+    // Belly plate (metal)
+    ctx.fillStyle = metal;
+    ctx.fillRect(x + u*2.5, y + u*5, u*5, u*2);
+
+    // Legs (4 legs, animated)
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + u*2,   y + u*6.5 + walk,  u*1.5, u*3);
+    ctx.fillRect(x + u*4,   y + u*6.5 - walk,  u*1.5, u*3);
+    ctx.fillRect(x + u*6,   y + u*6.5 + walk,  u*1.5, u*3);
+    ctx.fillRect(x + u*7.5, y + u*6.5 - walk,  u*1.5, u*3);
+    // Paws
+    ctx.fillStyle = metal;
+    ctx.fillRect(x + u*1.5, y + u*9,  u*2.5, u*1);
+    ctx.fillRect(x + u*3.5, y + u*9,  u*2.5, u*1);
+    ctx.fillRect(x + u*5.5, y + u*9,  u*2.5, u*1);
+    ctx.fillRect(x + u*7,   y + u*9,  u*2.5, u*1);
+
+    // Neck
+    ctx.fillStyle = fur;
+    ctx.fillRect(x + u*6.5, y + u*2, u*2, u*2);
+
+    // Head
+    ctx.fillStyle = fur;
+    ctx.fillRect(x + u*6.5, y - u*0.5, u*3.5, u*3);
+    // Snout
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + u*8.5, y + u*1,   u*2, u*1.5);
+    // Nose
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x + u*9.8, y + u*1,   u*0.8, u*0.8);
+    // Eye
+    ctx.fillStyle = eye;
+    ctx.fillRect(x + u*7,   y + u*0.2, u*1.2, u*1.2);
+    // Ear
+    ctx.fillStyle = dark;
+    ctx.fillRect(x + u*6.5, y - u*1.5, u*1.5, u*2);
+
+    // Collar
+    ctx.fillStyle = '#FF2200';
+    ctx.fillRect(x + u*6.5, y + u*2, u*2, u*0.8);
   }
 }
 

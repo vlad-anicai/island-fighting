@@ -41,6 +41,10 @@ export class GameEngine {
         this.mobileEnabled = false;
         // Thunder targeting state (desktop: wait for click)
         this.thunderTargeting = null;
+        // Wave state
+        this.currentWave = 1;
+        this.totalWaves = 1;
+        this.waveAnnouncement = null;
         
         // Menu references
         this.mainMenu = document.getElementById('mainMenu');
@@ -567,6 +571,11 @@ export class GameEngine {
         // Clear existing entities
         this.bots = [];
         this.projectiles = [];
+
+        // Set up waves: more waves per level as levels increase
+        this.totalWaves = Math.min(2 + Math.floor(this.level / 3), 8);
+        this.currentWave = 1;
+        this.waveAnnouncement = null;
         
         // Create island instance for this level
         this.island = new Island(this.level);
@@ -590,23 +599,35 @@ export class GameEngine {
     }
     
     /**
-     * Spawns bots for the current level
+     * Spawns bots for the current wave
      */
     spawnBots() {
-        // Bot count increases by 1 every 2 levels: 3 + floor(level / 2)
-        const botCount = Math.min(3 + Math.floor(this.level / 2), 20);
+        // Wave sizing: each wave has more bots than the last
+        const botsThisWave = Math.min(2 + this.currentWave + Math.floor(this.level / 2), 15);
         
-        for (let i = 0; i < botCount; i++) {
-            // Spawn from sides of screen (left or right)
-            const spawnFromLeft = Math.random() < 0.5;
-            const x = spawnFromLeft ? -50 : this.canvas.width + 50;
-            const y = this.island.y - 100; // Spawn above the island
-            
-            const bot = new Bot(x, y, this.level);
-            this.bots.push(bot);
+        for (let i = 0; i < botsThisWave; i++) {
+            // 5 spawn points: off-screen left/right + top-left/center/right above screen
+            const spawnPoints = [
+                { x: -50,                      y: this.island.y - 100 },  // off-screen left
+                { x: this.canvas.width + 50,   y: this.island.y - 100 },  // off-screen right
+                { x: 50,                        y: -50 },                  // top-left
+                { x: this.canvas.width / 2,     y: -50 },                  // top-center
+                { x: this.canvas.width - 50,    y: -50 },                  // top-right
+            ];
+            const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
+            this.bots.push(new Bot(sp.x, sp.y, this.level));
         }
         
-        console.log(`Spawned ${botCount} bots for level ${this.level}`);
+        // Show wave announcement
+        this.waveAnnouncement = {
+            text: this.currentWave === this.totalWaves
+                ? `WAVE ${this.currentWave} / ${this.totalWaves}  ★ FINAL WAVE ★`
+                : `WAVE ${this.currentWave} / ${this.totalWaves}`,
+            elapsed: 0,
+            duration: 2.0
+        };
+        
+        console.log(`Wave ${this.currentWave}/${this.totalWaves}: spawned ${botsThisWave} bots`);
     }
     
     /**
@@ -857,12 +878,39 @@ export class GameEngine {
         if (this.player.damageCooldown && this.player.damageCooldown > 0) {
             this.player.damageCooldown -= deltaTime;
         }
+
+        // Bot-bot solid collision: push overlapping bots apart
+        for (let i = 0; i < this.bots.length; i++) {
+            for (let j = i + 1; j < this.bots.length; j++) {
+                const a = this.bots[i];
+                const b = this.bots[j];
+                if (!this.checkCollision(a, b)) continue;
+                const overlapLeft  = (a.x + a.width)  - b.x;
+                const overlapRight = (b.x + b.width)  - a.x;
+                const overlapTop   = (a.y + a.height) - b.y;
+                const overlapBottom= (b.y + b.height) - a.y;
+                const min = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+                const half = min / 2;
+                if (min === overlapLeft)       { a.x -= half; b.x += half; }
+                else if (min === overlapRight) { a.x += half; b.x -= half; }
+                else if (min === overlapTop)   { a.y -= half; b.y += half; }
+                else                           { a.y += half; b.y -= half; }
+            }
+        }
         
         // Update thunder effect
         if (this.thunderEffect) {
             this.thunderEffect.elapsed += deltaTime;
             if (this.thunderEffect.elapsed >= this.thunderEffect.duration) {
                 this.thunderEffect = null;
+            }
+        }
+
+        // Update wave announcement timer
+        if (this.waveAnnouncement) {
+            this.waveAnnouncement.elapsed += deltaTime;
+            if (this.waveAnnouncement.elapsed >= this.waveAnnouncement.duration) {
+                this.waveAnnouncement = null;
             }
         }
 
@@ -874,8 +922,10 @@ export class GameEngine {
             if (proj.type === 'CONTROLLED_FIRE_BALL') {
                 const mouse = this.inputHandler.getMousePosition();
                 const rect = this.canvas.getBoundingClientRect();
-                proj.targetX = mouse.x - rect.left;
-                proj.targetY = mouse.y - rect.top;
+                const scaleX = this.canvas.width  / rect.width;
+                const scaleY = this.canvas.height / rect.height;
+                proj.targetX = (mouse.x - rect.left) * scaleX;
+                proj.targetY = (mouse.y - rect.top)  * scaleY;
             }
 
             proj.update(worldDelta);
@@ -918,10 +968,17 @@ export class GameEngine {
             }
         }
         
-        // Check level completion
+        // Check wave / level completion
         if (this.bots.length === 0) {
-            this.stateManager.addCoins(10);
-            this.endLevel(true);
+            if (this.currentWave < this.totalWaves) {
+                // Spawn next wave
+                this.currentWave++;
+                this.spawnBots();
+            } else {
+                // All waves cleared — level complete
+                this.stateManager.addCoins(10);
+                this.endLevel(true);
+            }
         }
     }
     
@@ -966,6 +1023,27 @@ export class GameEngine {
         // Render thunder effect
         if (this.thunderEffect) {
             this.renderThunder(this.thunderEffect);
+        }
+
+        // Wave announcement banner
+        if (this.waveAnnouncement) {
+            const wa = this.waveAnnouncement;
+            const progress = wa.elapsed / wa.duration;
+            // Fade in for first 20%, hold, fade out last 30%
+            let alpha = 1;
+            if (progress < 0.2) alpha = progress / 0.2;
+            else if (progress > 0.7) alpha = 1 - (progress - 0.7) / 0.3;
+            const ctx = this.ctx;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.fillRect(0, this.canvas.height / 2 - 40, this.canvas.width, 80);
+            ctx.fillStyle = '#FFD700';
+            ctx.font = 'bold 36px Courier New';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(wa.text, this.canvas.width / 2, this.canvas.height / 2);
+            ctx.restore();
         }
 
         // Slow motion gray overlay
@@ -1038,7 +1116,7 @@ export class GameEngine {
             document.getElementById('hudHP').textContent = `HP: ${this.player.hp}`;
         }
         document.getElementById('hudCoins').textContent = `Coins: ${this.stateManager.getCoins()}`;
-        document.getElementById('hudLevel').textContent = `Level: ${this.level}`;
+        document.getElementById('hudLevel').textContent = `Level: ${this.level}  Wave: ${this.currentWave}/${this.totalWaves}`;
     }
     
     /**
