@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Island Fighting Game</title>
     <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
+    <div id="scale-wrapper">
     <div id="game-container">
         <canvas id="gameCanvas" width="1000" height="600"></canvas>
         
@@ -108,8 +111,53 @@
             <div id="hudCoins" class="hud-item">Coins: 0</div>
             <div id="hudLevel" class="hud-item">Level: 1</div>
         </div>
+
+        <!-- Fullscreen button -->
+        <button id="fullscreenBtn" class="fullscreen-btn" title="Fullscreen">⛶</button>
+    </div>
     </div>
 
     <script type="module" src="js/main.js"></script>
+    <script>
+        // Scale game-container to fit screen while preserving 1000x600 aspect ratio
+        const GAME_W = 1000, GAME_H = 600;
+        const MOB_CTRL_H = 160; // height reserved for mobile controls overlay
+
+        window._mobileControlsActive = false;
+
+        function scaleGame() {
+            const availH = window._mobileControlsActive
+                ? window.innerHeight - MOB_CTRL_H
+                : window.innerHeight;
+            const scale = Math.min(window.innerWidth / GAME_W, availH / GAME_H);
+            const offsetX = (window.innerWidth  - GAME_W * scale) / 2;
+            const offsetY = (availH - GAME_H * scale) / 2;
+            const wrapper = document.getElementById('scale-wrapper');
+            wrapper.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+            wrapper.style.width  = GAME_W + 'px';
+            wrapper.style.height = GAME_H + 'px';
+        }
+
+        // Called by GameEngine when mobile controls toggle
+        window.setMobileControlsActive = function(active) {
+            window._mobileControlsActive = active;
+            scaleGame();
+        };
+
+        window.addEventListener('resize', scaleGame);
+        scaleGame();
+
+        // Fullscreen toggle
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+            const el = document.documentElement;
+            if (!document.fullscreenElement) {
+                (el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen).call(el);
+            } else {
+                (document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen).call(document);
+            }
+        });
+        document.addEventListener('fullscreenchange', scaleGame);
+        document.addEventListener('webkitfullscreenchange', scaleGame);
+    </script>
 </body>
 </html>

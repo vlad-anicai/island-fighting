@@ -58,8 +58,11 @@ export class GameEngine {
             if (this.scene !== 'gameplay') return;
             e.preventDefault();
             const touch = e.changedTouches[0];
-            this.inputHandler.mouseX = touch.clientX;
-            this.inputHandler.mouseY = touch.clientY;
+            const rect = this.canvas.getBoundingClientRect();
+            const scaleX = this.canvas.width  / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            this.inputHandler.mouseX = (touch.clientX - rect.left) * scaleX;
+            this.inputHandler.mouseY = (touch.clientY - rect.top)  * scaleY;
             this.inputHandler.mouseClicked = true;
         }, { passive: false });
         
@@ -147,7 +150,6 @@ export class GameEngine {
                 else overlay.classList.add('hidden');
             }
         });
-
         // Wire mobile buttons to InputHandler
         this._setupMobileButton('mobLeft',  'a',  false);
         this._setupMobileButton('mobRight', 'd',  false);
@@ -695,8 +697,10 @@ export class GameEngine {
                     this.thunderTargeting = null;
                     const mouse = this.inputHandler.getMousePosition();
                     const rect = this.canvas.getBoundingClientRect();
-                    this.player.thunderTargetX = mouse.x - rect.left;
-                    this.player.thunderTargetY = mouse.y - rect.top;
+                    const scaleX = this.canvas.width  / rect.width;
+                    const scaleY = this.canvas.height / rect.height;
+                    this.player.thunderTargetX = (mouse.x - rect.left) * scaleX;
+                    this.player.thunderTargetY = (mouse.y - rect.top)  * scaleY;
                     const result = this.player.useAbility(key);
                     if (result && result.type === 'THUNDER') {
                         const tx = result.x, ty = result.y, r = result.radius;
@@ -993,8 +997,10 @@ export class GameEngine {
         if (this.thunderTargeting) {
             const mouse = this.inputHandler.getMousePosition();
             const rect = this.canvas.getBoundingClientRect();
-            const mx = mouse.x - rect.left;
-            const my = mouse.y - rect.top;
+            const scaleX = this.canvas.width  / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            const mx = (mouse.x - rect.left) * scaleX;
+            const my = (mouse.y - rect.top)  * scaleY;
             const ctx = this.ctx;
             ctx.save();
             ctx.strokeStyle = 'rgba(255, 255, 100, 0.9)';
