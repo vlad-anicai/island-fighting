@@ -51,3 +51,4 @@ To verify Canvas rendering capability independently:
 - Modern web browser with HTML5 Canvas support
 - JavaScript enabled
 - No installation required
+
