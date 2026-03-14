@@ -24,7 +24,7 @@ class Bot {
     // Combat stats
     this.speed = 2;
     this.contactDamage = 10; // Takes 15 hits to kill player (150 HP / 10 damage)
-    this.coinReward = 10; // Fixed 10 coins per bot
+    this.coinReward = 5;
     
     // Status effects
     this.stunned = false;
@@ -43,28 +43,41 @@ class Bot {
    * @param {Object} playerPos - Player position {x, y}
    * @param {Island} island - The island platform
    */
-  update(deltaTime, playerPos, island) {
+  update(deltaTime, playerPos, island, timeScale = 1.0) {
     // Check if stun has expired
     if (this.stunned && Date.now() >= this.stunEndTime) {
       this.stunned = false;
     }
-    
+
+    const scaledSpeed = this.speed * timeScale;
+
     // AI: Move toward player (only if not stunned)
     if (!this.stunned) {
       const dx = playerPos.x - this.x;
-      
-      if (Math.abs(dx) > 5) {
-        this.velocityX = dx > 0 ? this.speed : -this.speed;
+      // Only apply AI movement if not being knocked back
+      if (Math.abs(this.velocityX) < scaledSpeed * 1.5) {
+        if (Math.abs(dx) > 5) {
+          this.velocityX = dx > 0 ? scaledSpeed : -scaledSpeed;
+        } else {
+          this.velocityX = 0;
+        }
+      }
+    } else {
+      // Stunned - let knockback decay
+      if (Math.abs(this.velocityX) > 0.1) {
+        this.velocityX *= 0.85;
       } else {
         this.velocityX = 0;
       }
-    } else {
-      // Stunned - no movement
-      this.velocityX = 0;
+    }
+
+    // Decay knockback velocity when grounded
+    if (this.isGrounded && Math.abs(this.velocityX) > scaledSpeed) {
+      this.velocityX *= 0.8;
     }
     
-    // Apply gravity
-    this.velocityY += this.gravity;
+    // Apply gravity (scaled)
+    this.velocityY += this.gravity * timeScale;
     
     // Update position
     this.x += this.velocityX;
@@ -109,9 +122,14 @@ class Bot {
     this.hp -= amount;
     if (this.hp <= 0) {
       this.hp = 0;
-      return true; // Bot defeated
+      return true;
     }
     return false;
+  }
+
+  applyKnockback(forceX, forceY) {
+    this.velocityX += forceX;
+    this.velocityY += forceY;
   }
   
   /**

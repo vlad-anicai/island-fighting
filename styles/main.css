@@ -107,13 +107,36 @@ body {
     font-weight: bold;
 }
 
+/* Ability Shop scrollable layout */
+#abilityShop {
+    justify-content: flex-start;
+    padding: 20px 40px 10px;
+}
+
+#abilityShop h2 {
+    flex-shrink: 0;
+}
+
+#abilityShop .coin-display {
+    flex-shrink: 0;
+    margin-bottom: 10px;
+}
+
+#abilityShop .back-btn {
+    flex-shrink: 0;
+    margin-top: 10px;
+}
+
 /* Ability List */
 .ability-list {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 10px;
     width: 100%;
     max-width: 600px;
+    overflow-y: auto;
+    flex: 1;
+    padding-right: 4px;
 }
 
 .ability-item {

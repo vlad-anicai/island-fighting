@@ -9,6 +9,8 @@ export class InputHandler {
         this.keys = {
             'a': false,
             'd': false,
+            'w': false,
+            's': false,
             ' ': false,  // Space key
             'z': false,
             'x': false,

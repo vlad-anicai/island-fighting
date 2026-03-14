@@ -41,6 +41,10 @@ class Player {
     this.shieldEndTime = 0;
     this.punchEffect = null;
     this.damageCooldown = 0; // Invulnerability after taking damage
+
+    // Fly ability
+    this.flying = false;
+    this.flyEndTime = 0;
     
     // Abilities
     this.abilities = {
@@ -86,9 +90,25 @@ class Player {
       this.velocityY = this.jumpStrength;
       this.isGrounded = false;
     }
-    
-    // Apply gravity
-    this.velocityY += this.gravity;
+
+    // Check fly expiry
+    if (this.flying && Date.now() >= this.flyEndTime) {
+      this.flying = false;
+    }
+
+    // Apply gravity (suppressed while flying)
+    if (this.flying) {
+      // W = up, S = down
+      if (input.isKeyPressed('w')) {
+        this.velocityY = -5;
+      } else if (input.isKeyPressed('s')) {
+        this.velocityY = 5;
+      } else {
+        this.velocityY *= 0.7; // hover damping
+      }
+    } else {
+      this.velocityY += this.gravity;
+    }
     
     // Update position based on velocity
     this.x += this.velocityX;
@@ -242,6 +262,31 @@ class Player {
         result = this.activateEarthquake();
         this.abilityCooldowns[key] = 15.0;
         break;
+
+      case 'FIRE_BLAST':
+        result = this.activateFireBlast();
+        this.abilityCooldowns[key] = 6.0;
+        break;
+
+      case 'THUNDER':
+        result = this.activateThunder();
+        this.abilityCooldowns[key] = 10.0;
+        break;
+
+      case 'CONTROLLED_FIRE_BALL':
+        result = this.activateControlledFireBall();
+        this.abilityCooldowns[key] = 12.0;
+        break;
+
+      case 'FLY':
+        result = this.activateFly();
+        this.abilityCooldowns[key] = 20.0;
+        break;
+
+      case 'SLOW_MOTION':
+        result = this.activateSlowMotion();
+        this.abilityCooldowns[key] = 25.0;
+        break;
     }
     
     return result;
@@ -288,7 +333,20 @@ class Player {
       velocityY: 0,
       damage: 30
     };
-    
+
+    // Punch-style arm animation with fire coloring
+    this.punchEffect = {
+      active: true,
+      x: this.facingRight ? this.x + this.width : this.x - 100,
+      y: this.y,
+      width: 100,
+      height: this.height,
+      duration: 0.25,
+      elapsed: 0,
+      isStrong: true,
+      isFireBall: true
+    };
+
     return { type: 'FIRE_BALL', projectile };
   }
   
@@ -313,7 +371,7 @@ class Player {
       y: this.y - 15,
       velocityX: this.facingRight ? speed : -speed,
       velocityY: 0,
-      damage: 100
+      damage: 50
     };
     
     return { type: 'TORNADO', projectile };
@@ -325,129 +383,384 @@ class Player {
   activateEarthquake() {
     return { type: 'EARTHQUAKE', stunDuration: 3000 }; // 3 seconds stun
   }
+
+  /**
+   * Activates Thunder Strike — lightning bolt at mouse position
+   */
+  activateThunder() {
+    // targetX/Y are set by GameEngine just before calling useAbility
+    return { type: 'THUNDER', x: this.thunderTargetX || 0, y: this.thunderTargetY || 0, damage: 60, radius: 40 };
+  }
+
+  /**
+   * Activates Fly — lets player fly with W/S for 8 seconds
+   */
+  activateFly() {
+    this.flying = true;
+    this.flyEndTime = Date.now() + 8000; // 8 seconds
+    this.velocityY = -3; // initial lift
+    return { type: 'FLY' };
+  }
+
+  /**
+   * Activates Slow Motion — signals GameEngine to slow time for 5 seconds
+   */
+  activateSlowMotion() {
+    return { type: 'SLOW_MOTION', duration: 5000 };
+  }
+
+  /**
+   * Activates Controlled Fire Ball — homing fireball that follows the cursor
+   */
+  activateControlledFireBall() {
+    return {
+      type: 'CONTROLLED_FIRE_BALL',
+      projectile: {
+        type: 'CONTROLLED_FIRE_BALL',
+        x: this.facingRight ? this.x + this.width : this.x - 32,
+        y: this.y + this.height / 2 - 16,
+        velocityX: this.facingRight ? 5 : -5,
+        velocityY: 0,
+        damage: 80
+      }
+    };
+  }
+
+  /**
+   * Activates Fire Blast — close-range punch with fire particles
+   */
+  activateFireBlast() {
+    const range = 80;
+    const hitbox = {
+      x: this.facingRight ? this.x + this.width : this.x - range,
+      y: this.y - 10,
+      width: range,
+      height: this.height + 20,
+      damage: 40
+    };
+
+    // Punch arm animation with fire blast coloring
+    this.punchEffect = {
+      active: true,
+      x: hitbox.x,
+      y: hitbox.y,
+      width: hitbox.width,
+      height: hitbox.height,
+      duration: 0.6,
+      elapsed: 0,
+      isStrong: true,
+      isFireBlast: true
+    };
+
+    return { type: 'FIRE_BLAST', hitbox };
+  }
   
   /**
-   * Renders the player to the canvas context
+   * Renders the player as a pixel-art human with punch animation
    * @param {CanvasRenderingContext2D} ctx - The canvas rendering context
    */
   render(ctx) {
-    // Disable image smoothing for pixelated art style
     ctx.imageSmoothingEnabled = false;
-    
-    // Flash red when taking damage
+
     const isInvulnerable = this.damageCooldown && this.damageCooldown > 0;
-    const flashEffect = isInvulnerable && Math.floor(this.damageCooldown * 10) % 2 === 0;
-    
-    // Draw player body
-    ctx.fillStyle = flashEffect ? '#FF6B6B' : '#4169E1'; // Flash red when hit
-    ctx.fillRect(this.x, this.y, this.width, this.height);
-    
-    // Draw head
-    ctx.fillStyle = flashEffect ? '#FFB6B6' : '#FFD700';
-    ctx.fillRect(this.x + 8, this.y + 4, 16, 16);
-    
-    // Draw eyes (facing direction indicator)
-    ctx.fillStyle = '#000000';
-    if (this.facingRight) {
-      ctx.fillRect(this.x + 18, this.y + 10, 4, 4);
-    } else {
-      ctx.fillRect(this.x + 10, this.y + 10, 4, 4);
+    const flash = isInvulnerable && Math.floor(this.damageCooldown * 10) % 2 === 0;
+
+    // Skin / shirt / pants colors (flash red when hit)
+    const skinColor  = flash ? '#FF9999' : '#FDBCB4';
+    const shirtColor = flash ? '#FF6B6B' : '#4169E1';
+    const pantsColor = flash ? '#CC4444' : '#1a3a8a';
+    const hairColor  = flash ? '#FF4444' : '#4a2800';
+    const shoeColor  = flash ? '#AA2222' : '#222222';
+
+    // Determine punch animation progress (0 = idle, 1 = fully extended)
+    let punchProgress = 0;
+    if (this.punchEffect && this.punchEffect.active) {
+      const t = this.punchEffect.elapsed / this.punchEffect.duration;
+      // Extend fast, retract slow: peak at t=0.3
+      punchProgress = t < 0.3 ? t / 0.3 : 1 - ((t - 0.3) / 0.7);
     }
-    
-    // Draw punch effect if active
+
+    const dir = this.facingRight ? 1 : -1;
+    // cx = horizontal center of the body
+    const cx = this.x + this.width / 2;
+    // Body top
+    const by = this.y;
+
+    // --- HEAD ---
+    // 10x10 head centered on cx, top 2px from body top
+    const headW = 10, headH = 10;
+    const headX = cx - headW / 2;
+    const headY = by + 2;
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(headX, headY, headW, headH);
+
+    // Hair (3px strip on top)
+    ctx.fillStyle = hairColor;
+    ctx.fillRect(headX, headY, headW, 3);
+
+    // Eyes
+    ctx.fillStyle = '#000';
+    if (this.facingRight) {
+      ctx.fillRect(headX + 6, headY + 4, 2, 2);
+    } else {
+      ctx.fillRect(headX + 2, headY + 4, 2, 2);
+    }
+
+    // --- TORSO (shirt) ---
+    const torsoX = cx - 6;
+    const torsoY = headY + headH;
+    const torsoW = 12, torsoH = 14;
+    ctx.fillStyle = shirtColor;
+    ctx.fillRect(torsoX, torsoY, torsoW, torsoH);
+
+    // --- LEGS (pants) ---
+    const legY = torsoY + torsoH;
+    const legH = 14;
+    ctx.fillStyle = pantsColor;
+    // Left leg
+    ctx.fillRect(cx - 6, legY, 5, legH);
+    // Right leg
+    ctx.fillRect(cx + 1, legY, 5, legH);
+
+    // --- SHOES ---
+    ctx.fillStyle = shoeColor;
+    ctx.fillRect(cx - 7, legY + legH - 3, 6, 3);
+    ctx.fillRect(cx,     legY + legH - 3, 6, 3);
+
+    // --- ARMS ---
+    // Resting arm position: hanging at sides, elbow bent slightly
+    // Punching arm: extends forward in facing direction
+    const armY = torsoY + 2;
+    const armW = 4, armH = 10;
+
+    // Back arm (opposite to facing) — always resting
+    const backArmX = this.facingRight ? cx - 6 - armW : cx + 6;
+    ctx.fillStyle = shirtColor;
+    ctx.fillRect(backArmX, armY, armW, armH);
+    // Back hand
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(backArmX, armY + armH, armW, 3);
+
+    // Front arm — animates when punching
+    // Idle: tucked at side. Punch: extends forward
+    const frontArmIdleX = this.facingRight ? cx + 6 : cx - 6 - armW;
+    // Extended position: arm reaches out in facing direction
+    const extendAmount = punchProgress * 18;
+    const frontArmX = frontArmIdleX + dir * extendAmount;
+    // Arm shortens slightly as it extends (foreshortening feel)
+    const frontArmH = armH - punchProgress * 3;
+
+    ctx.fillStyle = shirtColor;
+    ctx.fillRect(frontArmX, armY, armW, frontArmH);
+    // Front fist
+    const fistColor = punchProgress > 0.1
+      ? (this.punchEffect && this.punchEffect.isFireBlast ? '#FF2200'
+        : this.punchEffect && this.punchEffect.isFireBall ? '#FF6600'
+        : this.punchEffect && this.punchEffect.isStrong ? '#FF4400' : '#FFD700')
+      : skinColor;
+    ctx.fillStyle = fistColor;
+    ctx.fillRect(frontArmX, armY + frontArmH, armW + 1, 4);
+
+    // --- PUNCH IMPACT EFFECT ---
     if (this.punchEffect && this.punchEffect.active) {
       const progress = this.punchEffect.elapsed / this.punchEffect.duration;
-      const alpha = 1 - progress; // Fade out
       const isStrong = this.punchEffect.isStrong;
-      
-      // Draw punch impact effect
-      const color = isStrong ? 'rgba(255, 0, 0, ' : 'rgba(255, 255, 0, ';
-      ctx.fillStyle = color + (alpha * 0.6) + ')';
-      ctx.fillRect(
-        this.punchEffect.x,
-        this.punchEffect.y,
-        this.punchEffect.width,
-        this.punchEffect.height
-      );
-      
-      // Draw punch outline
-      const outlineColor = isStrong ? 'rgba(200, 0, 0, ' : 'rgba(255, 165, 0, ';
-      ctx.strokeStyle = outlineColor + alpha + ')';
-      ctx.lineWidth = isStrong ? 5 : 3;
-      ctx.strokeRect(
-        this.punchEffect.x,
-        this.punchEffect.y,
-        this.punchEffect.width,
-        this.punchEffect.height
-      );
-      
-      // Draw impact stars
-      const starCount = isStrong ? 5 : 3;
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-      for (let i = 0; i < starCount; i++) {
-        const starX = this.punchEffect.x + (i + 1) * (this.punchEffect.width / (starCount + 1));
-        const starY = this.punchEffect.y + this.punchEffect.height / 2;
-        const starSize = (isStrong ? 8 : 6) * (1 - progress);
-        
-        // Draw star shape
-        ctx.beginPath();
-        for (let j = 0; j < 5; j++) {
-          const angle = (j * 4 * Math.PI) / 5 - Math.PI / 2;
-          const radius = j % 2 === 0 ? starSize : starSize / 2;
-          const x = starX + Math.cos(angle) * radius;
-          const y = starY + Math.sin(angle) * radius;
-          if (j === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
+      const isFireBall = this.punchEffect.isFireBall;
+      const isFireBlast = this.punchEffect.isFireBlast;
+
+      // Fire Blast: hold full opacity for first half, then fade out in second half
+      const alpha = isFireBlast
+        ? (progress < 0.5 ? 1 : 1 - ((progress - 0.5) / 0.5))
+        : 1 - progress;
+
+      // Impact flash at fist tip
+      const impactX = this.facingRight
+        ? frontArmX + armW + 1
+        : frontArmX - 12;
+      const impactY = armY + frontArmH - 4;
+      const impactR = (isStrong ? 14 : 9) * (1 - progress * 0.5);
+
+      if (isFireBlast) {
+        // Flame tongues shooting forward from the fist
+        const time = this.punchEffect.elapsed;
+        const dir2 = this.facingRight ? 1 : -1;
+
+        // Draw multiple flame tongues fanning out in the punch direction
+        const flameCount = 7;
+        for (let i = 0; i < flameCount; i++) {
+          // Fan spread: center flame goes straight, outer ones angle up/down
+          const spread = ((i - (flameCount - 1) / 2) / ((flameCount - 1) / 2)) * 0.6; // -0.6 to +0.6 radians
+          const baseAngle = this.facingRight ? 0 : Math.PI;
+          const angle = baseAngle + spread;
+
+          // Flame length grows then shrinks with animation, with slight wobble per flame
+          const wobble = Math.sin(time * 20 + i * 1.3) * 0.15;
+          const maxLen = 70 + i % 3 * 20; // vary lengths
+          const len = maxLen * Math.sin(progress * Math.PI) * (1 + wobble);
+          const width = (14 - Math.abs(spread) * 6) * (1 - progress * 0.5);
+          if (len <= 0 || width <= 0) continue;
+
+          // Flame: goes straight forward 60px, then turns 90° upward
+          const bendDist = 60; // px from fist where the turn happens
+          const bendX = impactX + Math.cos(angle) * bendDist;
+          const bendY = impactY + Math.sin(angle) * bendDist;
+          const riseLen = Math.max(0, len - bendDist); // remaining length goes up
+          const tipX = bendX;
+          const tipY = bendY - riseLen;
+
+          // Perpendicular for flame width (horizontal spread at base)
+          const perpX = -Math.sin(angle);
+          const perpY = Math.cos(angle);
+
+          // Cubic bezier: cp1 keeps going forward (no rise), cp2 at bend starts going up
+          const cp1X = impactX + Math.cos(angle) * bendDist * 0.8;
+          const cp1Y = impactY + Math.sin(angle) * bendDist * 0.8;
+          const cp2X = bendX;
+          const cp2Y = bendY - riseLen * 0.2; // just starting to rise at bend
+
+          const gradient = ctx.createLinearGradient(impactX, impactY, tipX, tipY);
+          gradient.addColorStop(0, `rgba(255, 255, 200, ${alpha})`);
+          gradient.addColorStop(0.3, `rgba(255, 180, 0, ${alpha})`);
+          gradient.addColorStop(0.7, `rgba(255, 60, 0, ${alpha * 0.8})`);
+          gradient.addColorStop(1, `rgba(200, 0, 0, 0)`);
+
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.moveTo(impactX + perpX * width, impactY + perpY * width);
+          ctx.bezierCurveTo(
+            cp1X + perpX * width * 0.5, cp1Y + perpY * width * 0.5,
+            cp2X + width * 0.15,        cp2Y,
+            tipX, tipY
+          );
+          ctx.bezierCurveTo(
+            cp2X - width * 0.15,        cp2Y,
+            cp1X - perpX * width * 0.5, cp1Y - perpY * width * 0.5,
+            impactX - perpX * width, impactY - perpY * width
+          );
+          ctx.closePath();
+          ctx.fill();
         }
-        ctx.closePath();
+
+        // Hot white core at fist
+        const coreR = 10 * (1 - progress * 0.6);
+        ctx.fillStyle = `rgba(255, 255, 220, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(impactX, impactY, coreR, 0, Math.PI * 2);
         ctx.fill();
+
+      } else if (isFireBall) {
+        // Fire burst: layered orange/yellow/white circles
+        ctx.fillStyle = `rgba(255, 255, 180, ${alpha * 0.9})`;
+        ctx.beginPath();
+        ctx.arc(impactX, impactY, impactR * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255, 140, 0, ${alpha * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(impactX, impactY, impactR, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(200, 50, 0, ${alpha * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(impactX, impactY, impactR * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Flame spikes
+        ctx.strokeStyle = `rgba(255, 100, 0, ${alpha})`;
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i / 8) * Math.PI * 2;
+          const len = impactR * 2 * (1 - progress * 0.3);
+          ctx.beginPath();
+          ctx.moveTo(impactX + Math.cos(angle) * impactR * 0.5,
+                     impactY + Math.sin(angle) * impactR * 0.5);
+          ctx.lineTo(impactX + Math.cos(angle) * len,
+                     impactY + Math.sin(angle) * len);
+          ctx.stroke();
+        }
+      } else {
+        ctx.fillStyle = isStrong
+          ? `rgba(255, 80, 0, ${alpha * 0.85})`
+          : `rgba(255, 230, 0, ${alpha * 0.85})`;
+        ctx.beginPath();
+        ctx.arc(impactX, impactY, impactR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Impact lines radiating outward
+        const lineCount = isStrong ? 8 : 5;
+        ctx.strokeStyle = isStrong
+          ? `rgba(255, 150, 0, ${alpha})`
+          : `rgba(255, 255, 100, ${alpha})`;
+        ctx.lineWidth = isStrong ? 3 : 2;
+        for (let i = 0; i < lineCount; i++) {
+          const angle = (i / lineCount) * Math.PI * 2;
+          const len = impactR * 1.6 * (1 - progress * 0.4);
+          ctx.beginPath();
+          ctx.moveTo(impactX + Math.cos(angle) * impactR * 0.4,
+                     impactY + Math.sin(angle) * impactR * 0.4);
+          ctx.lineTo(impactX + Math.cos(angle) * len,
+                     impactY + Math.sin(angle) * len);
+          ctx.stroke();
+        }
       }
     }
-    
-    // Draw shield effect if active
+
+    // --- FLY EFFECT ---
+    if (this.flying) {
+      const time = Date.now() / 1000;
+      const flapAngle = Math.sin(time * 10) * 0.4; // flapping
+
+      // Wings on each side
+      for (const side of [-1, 1]) {
+        const wingBaseX = cx + side * 6;
+        const wingBaseY = torsoY + 4;
+        const wingTipX = wingBaseX + side * (18 + Math.abs(Math.sin(time * 10)) * 8);
+        const wingTipY = wingBaseY - 10 + Math.sin(time * 10 + (side > 0 ? 0 : Math.PI)) * 6;
+
+        ctx.fillStyle = `rgba(100, 200, 255, 0.7)`;
+        ctx.beginPath();
+        ctx.moveTo(wingBaseX, wingBaseY);
+        ctx.quadraticCurveTo(wingTipX, wingBaseY - 14, wingTipX, wingTipY);
+        ctx.quadraticCurveTo(wingTipX, wingBaseY + 6, wingBaseX, wingBaseY + 8);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(180, 240, 255, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Remaining fly time indicator (small bar above head)
+      const remaining = Math.max(0, (this.flyEndTime - Date.now()) / 8000);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(headX - 2, headY - 8, headW + 4, 4);
+      ctx.fillStyle = `rgba(100, 200, 255, 0.9)`;
+      ctx.fillRect(headX - 2, headY - 8, (headW + 4) * remaining, 4);
+    }
+
+    // --- SHIELD EFFECT ---
     if (this.shieldActive) {
       const time = Date.now() / 1000;
-      const pulse = Math.sin(time * 5) * 0.2 + 0.8; // Pulsing effect
-      
-      // Draw shield bubble
+      const pulse = Math.sin(time * 5) * 0.2 + 0.8;
+
       ctx.strokeStyle = `rgba(0, 255, 255, ${pulse})`;
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(
-        this.x + this.width / 2,
-        this.y + this.height / 2,
-        this.width * 1.5,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(cx, by + this.height / 2, this.width * 1.5, 0, Math.PI * 2);
       ctx.stroke();
-      
-      // Inner shield layer
+
       ctx.strokeStyle = `rgba(100, 255, 255, ${pulse * 0.5})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(
-        this.x + this.width / 2,
-        this.y + this.height / 2,
-        this.width * 1.3,
-        0,
-        Math.PI * 2
-      );
+      ctx.arc(cx, by + this.height / 2, this.width * 1.3, 0, Math.PI * 2);
       ctx.stroke();
-      
-      // Shield sparkles
+
       for (let i = 0; i < 6; i++) {
         const angle = (time * 2 + i * 60) * Math.PI / 180;
-        const radius = this.width * 1.5;
-        const sx = this.x + this.width / 2 + Math.cos(angle) * radius;
-        const sy = this.y + this.height / 2 + Math.sin(angle) * radius;
-        
+        const r = this.width * 1.5;
         ctx.fillStyle = `rgba(255, 255, 255, ${pulse})`;
         ctx.beginPath();
-        ctx.arc(sx, sy, 3, 0, Math.PI * 2);
+        ctx.arc(cx + Math.cos(angle) * r, by + this.height / 2 + Math.sin(angle) * r, 3, 0, Math.PI * 2);
         ctx.fill();
       }
     }
