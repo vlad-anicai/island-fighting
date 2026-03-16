@@ -37,6 +37,9 @@ export class GameEngine {
         this.timeScale = 1.0;
         this.slowMotionEndTime = 0;
 
+        // No-cooldown cheat end time (0 = inactive)
+        this.noCooldownEndTime = 0;
+
         // Mobile controls state
         this.mobileEnabled = false;
         // Thunder targeting state (desktop: wait for click)
@@ -139,6 +142,15 @@ export class GameEngine {
             this.showMenu('main');
         });
 
+        // Death screen buttons
+        document.getElementById('tryAgainBtn').addEventListener('click', () => {
+            this.showMenu('gameplay');
+            this.initializeLevel(this.level);
+        });
+        document.getElementById('deathMenuBtn').addEventListener('click', () => {
+            this.showMenu('main');
+        });
+
         // Mobile controls toggle
         const mobileToggleBtn = document.getElementById('mobileToggleBtn');
         mobileToggleBtn.addEventListener('click', () => {
@@ -212,6 +224,7 @@ export class GameEngine {
         this.codesMenu.classList.remove('active');
         this.controlsMenu.classList.remove('active');
         this.hud.classList.remove('active');
+        document.getElementById('deathScreen').classList.remove('active');
 
         // Always hide mobile overlay when in a menu
         document.getElementById('mobileControls').classList.add('hidden');
@@ -230,17 +243,17 @@ export class GameEngine {
             case 'shop':
                 this.abilityShop.classList.add('active');
                 this.scene = 'menu';
-                this.updateAbilityShop(); // Update shop display
+                this.updateAbilityShop();
                 break;
             case 'hpUpgrade':
                 this.hpUpgrade.classList.add('active');
                 this.scene = 'menu';
-                this.updateHPUpgrade(); // Update HP upgrade display
+                this.updateHPUpgrade();
                 break;
             case 'settings':
                 this.abilitySettings.classList.add('active');
                 this.scene = 'menu';
-                this.updateAbilitySettings(); // Update settings display
+                this.updateAbilitySettings();
                 break;
             case 'codes':
                 this.codesMenu.classList.add('active');
@@ -250,6 +263,16 @@ export class GameEngine {
             case 'controls':
                 this.controlsMenu.classList.add('active');
                 this.scene = 'menu';
+                break;
+            case 'death':
+                document.getElementById('deathScreen').classList.add('active');
+                document.getElementById('deathLevel').textContent = `Reached Level ${this.level}`;
+                this.scene = 'menu';
+                break;
+            case 'gameplay':
+                this.hud.classList.add('active');
+                if (this.mobileEnabled) document.getElementById('mobileControls').classList.remove('hidden');
+                this.scene = 'gameplay';
                 break;
         }
     }
@@ -277,7 +300,8 @@ export class GameEngine {
             { type: 'CONTROLLED_FIRE_BALL', name: 'Controlled Fire Ball', cost: 1500, description: 'Homing fireball that follows your cursor' },
             { type: 'FLY', name: 'Fly', cost: 1800, description: 'Fly freely with W/S for 8 seconds' },
             { type: 'SLOW_MOTION', name: 'Slow Motion', cost: 2000, description: 'Slows all enemies for 5 seconds' },
-            { type: 'PLASMA_LASER', name: 'Plasma Laser', cost: 1600, description: 'Fast piercing beam that passes through all enemies' }
+            { type: 'PLASMA_LASER', name: 'Plasma Laser', cost: 1600, description: 'Fast piercing beam that passes through all enemies' },
+            { type: 'BLACK_FLASH', name: 'Black Flash', cost: 1300, description: 'Super punch with black sparks — massive damage' }
         ];
         
         // Get ability list container
@@ -330,6 +354,10 @@ export class GameEngine {
                 buyBtn.addEventListener('click', () => {
                     if (this.stateManager.purchaseAbility(ability.type, ability.cost)) {
                         console.log(`Purchased ${ability.name}!`);
+                        // Sync player abilities with updated bindings
+                        if (this.player) {
+                            this.player.abilities = { ...this.stateManager.getKeyBindings() };
+                        }
                         this.updateAbilityShop(); // Refresh display
                     }
                 });
@@ -369,7 +397,8 @@ export class GameEngine {
             'FLY': 'Fly',
             'SLOW_MOTION': 'Slow Motion',
             'PLASMA_LASER': 'Plasma Laser',
-            'BOMB': 'Bomb'
+            'BOMB': 'Bomb',
+            'BLACK_FLASH': 'Black Flash'
         };
         
         keys.forEach(key => {
@@ -507,6 +536,11 @@ export class GameEngine {
             this.showCodeMessage(`Success! +${reward.toLocaleString()} coins!`, 'success');
             codeInput.value = '';
             console.log(`Code redeemed: ${code} - Awarded ${reward} coins`);
+        } else if (code === 'RIG15.ROT') {
+            this.noCooldownEndTime = Date.now() + 5 * 60 * 1000; // 5 minutes
+            this.showCodeMessage('No cooldowns for 5 minutes!', 'success');
+            codeInput.value = '';
+            console.log('Code redeemed: SIGMA.SUS - No cooldowns for 5 minutes');
         } else {
             this.showCodeMessage('Invalid code', 'error');
         }
@@ -672,13 +706,8 @@ export class GameEngine {
      */
     showGameOver() {
         console.log('Game Over');
-        
-        // Hide mobile overlay when returning to menu
         document.getElementById('mobileControls').classList.add('hidden');
-        
-        // TODO: Display game over screen with stats (Task 23.3)
-        // For now, just return to main menu
-        this.showMenu('main');
+        this.showMenu('death');
     }
     
     start() {
@@ -700,6 +729,16 @@ export class GameEngine {
             // Update slow motion timer
             if (this.timeScale < 1.0 && Date.now() >= this.slowMotionEndTime) {
                 this.timeScale = 1.0;
+            }
+            // Zero ability cooldowns while SIGMA.SUS is active
+            if (this.noCooldownEndTime > 0 && this.player) {
+                if (Date.now() < this.noCooldownEndTime) {
+                    for (const key in this.player.abilityCooldowns) {
+                        this.player.abilityCooldowns[key] = 0;
+                    }
+                } else {
+                    this.noCooldownEndTime = 0;
+                }
             }
             this.updateGameplay(deltaTime);
             this.renderGameplay();
@@ -795,6 +834,10 @@ export class GameEngine {
                                     const defeated = bot.takeDamage(result.hitbox.damage);
                                     const kbDir = bot.x + bot.width / 2 > this.player.x + this.player.width / 2 ? 1 : -1;
                                     bot.applyKnockback(kbDir * 12, -6);
+                                    // Black Flash hit effect on bot
+                                    if (result.type === 'BLACK_FLASH') {
+                                        bot.blackFlashEffect = { elapsed: 0, duration: 0.5 };
+                                    }
                                     if (defeated) {
                                         this.stateManager.addCoins(bot.coinReward);
                                         this.bots.splice(i, 1);
@@ -854,6 +897,14 @@ export class GameEngine {
         for (let i = this.bots.length - 1; i >= 0; i--) {
             const bot = this.bots[i];
             bot.update(worldDelta, { x: this.player.x, y: this.player.y }, this.island, this.timeScale);
+
+            // Update black flash hit effect
+            if (bot.blackFlashEffect) {
+                bot.blackFlashEffect.elapsed += deltaTime;
+                if (bot.blackFlashEffect.elapsed >= bot.blackFlashEffect.duration) {
+                    bot.blackFlashEffect = null;
+                }
+            }
             
             // Check bot-player collision (with cooldown to prevent instant death)
             if (this.checkCollision(bot, this.player)) {
@@ -1057,6 +1108,10 @@ export class GameEngine {
         // Render bots
         for (const bot of this.bots) {
             bot.render(this.ctx);
+            // Black Flash hit effect
+            if (bot.blackFlashEffect) {
+                this.renderBlackFlashHit(bot);
+            }
         }
         
         // Render projectiles
@@ -1182,7 +1237,8 @@ export class GameEngine {
             'FLY': 'Fly',
             'SLOW_MOTION': 'SlowMo',
             'PLASMA_LASER': 'Plasma',
-            'BOMB': 'Bomb'
+            'BOMB': 'Bomb',
+            'BLACK_FLASH': 'B.Flash'
         };
         const abilityColors = {
             'STRONG_PUNCH': '#FF0000',
@@ -1196,7 +1252,8 @@ export class GameEngine {
             'FLY': '#64C8FF',
             'SLOW_MOTION': '#AAAACC',
             'PLASMA_LASER': '#00FFEE',
-            'BOMB': '#888800'
+            'BOMB': '#888800',
+            'BLACK_FLASH': '#330000'
         };
 
         if (this.mobileEnabled) {
@@ -1289,6 +1346,87 @@ export class GameEngine {
     }
     
     /**
+     * Renders Black Flash hit effect around a bot
+     */
+    renderBlackFlashHit(bot) {
+        const ctx = this.ctx;
+        const fx = bot.blackFlashEffect;
+        const progress = fx.elapsed / fx.duration;
+        const alpha = 1 - progress;
+        const cx = bot.x + bot.width / 2;
+        const cy = bot.y + bot.height / 2;
+
+        ctx.save();
+        ctx.lineCap = 'butt';
+
+        // Slashes radiating around the bot center in all directions
+        const slashes = [
+            { angle: -0.3,  len: 70, halfW: 7 },
+            { angle:  0.15, len: 85, halfW: 6 },
+            { angle:  0.55, len: 60, halfW: 5 },
+            { angle: -0.75, len: 55, halfW: 5 },
+            { angle:  0.9,  len: 75, halfW: 6 },
+            { angle: -1.2,  len: 50, halfW: 4 },
+            { angle:  1.4,  len: 65, halfW: 5 },
+            { angle: -1.8,  len: 58, halfW: 5 },
+            { angle:  2.2,  len: 72, halfW: 6 },
+            { angle: -2.6,  len: 48, halfW: 4 },
+            { angle:  2.9,  len: 80, halfW: 7 },
+            { angle: -3.0,  len: 55, halfW: 5 },
+        ];
+
+        slashes.forEach(s => {
+            const len = s.len * (0.4 + progress * 0.6); // grow outward
+            const startX = cx - Math.cos(s.angle) * len * 0.2;
+            const startY = cy - Math.sin(s.angle) * len * 0.2;
+            const endX   = cx + Math.cos(s.angle) * len * 0.8;
+            const endY   = cy + Math.sin(s.angle) * len * 0.8;
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            const perpAngle = s.angle + Math.PI / 2;
+            const hw = s.halfW * (1 - progress * 0.5);
+
+            const px = Math.cos(perpAngle) * hw;
+            const py = Math.sin(perpAngle) * hw;
+
+            const drawLozenge = (scale) => {
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(midX + px * scale, midY + py * scale);
+                ctx.lineTo(endX, endY);
+                ctx.lineTo(midX - px * scale, midY - py * scale);
+                ctx.closePath();
+            };
+
+            // Black outer
+            drawLozenge(1);
+            ctx.fillStyle = `rgba(0, 0, 0, ${alpha * 0.95})`;
+            ctx.fill();
+
+            // Red mid
+            drawLozenge(0.65);
+            ctx.fillStyle = `rgba(210, 0, 0, ${alpha * 0.85})`;
+            ctx.fill();
+
+            // White core
+            drawLozenge(0.25);
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+            ctx.fill();
+        });
+
+        // Red radial glow around bot
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 60 * (0.5 + progress * 0.5));
+        glow.addColorStop(0, `rgba(180, 0, 0, ${alpha * 0.35})`);
+        glow.addColorStop(1, `rgba(0, 0, 0, 0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 60 * (0.5 + progress * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    /**
      * Renders a jagged lightning bolt at the thunder strike position
      */
     renderThunder(effect) {
@@ -1366,7 +1504,8 @@ export class GameEngine {
             'FLY': 20.0,
             'SLOW_MOTION': 25.0,
             'PLASMA_LASER': 15.0,
-            'BOMB': 12.0
+            'BOMB': 12.0,
+            'BLACK_FLASH': 8.0
         };
         return cooldowns[abilityType] || 1.0;
     }

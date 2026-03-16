@@ -337,6 +337,11 @@ class Player {
         result = this.activateBomb();
         this.abilityCooldowns[key] = 12.0;
         break;
+
+      case 'BLACK_FLASH':
+        result = this.activateBlackFlash();
+        this.abilityCooldowns[key] = 8.0;
+        break;
     }
     
     return result;
@@ -450,6 +455,34 @@ class Player {
     this.flyEndTime = Date.now() + 8000; // 8 seconds
     this.velocityY = -3; // initial lift
     return { type: 'FLY' };
+  }
+
+  /**
+   * Activates Black Flash — super punch with black spark / red outline visual
+   */
+  activateBlackFlash() {
+    const range = 70;
+    const hitbox = {
+      x: this.facingRight ? this.x + this.width : this.x - range,
+      y: this.y - 8,
+      width: range,
+      height: this.height + 16,
+      damage: 150
+    };
+
+    this.punchEffect = {
+      active: true,
+      x: hitbox.x,
+      y: hitbox.y,
+      width: hitbox.width,
+      height: hitbox.height,
+      duration: 0.45,
+      elapsed: 0,
+      isStrong: true,
+      isBlackFlash: true
+    };
+
+    return { type: 'BLACK_FLASH', hitbox };
   }
 
   /**
@@ -640,7 +673,8 @@ class Player {
     ctx.fillRect(frontArmX, armY, armW, frontArmH);
     // Front fist
     const fistColor = punchProgress > 0.1
-      ? (this.punchEffect && this.punchEffect.isFireBlast ? '#FF2200'
+      ? (this.punchEffect && this.punchEffect.isBlackFlash ? '#1a0000'
+        : this.punchEffect && this.punchEffect.isFireBlast ? '#FF2200'
         : this.punchEffect && this.punchEffect.isFireBall ? '#FF6600'
         : this.punchEffect && this.punchEffect.isStrong ? '#FF4400' : '#FFD700')
       : skinColor;
@@ -653,11 +687,14 @@ class Player {
       const isStrong = this.punchEffect.isStrong;
       const isFireBall = this.punchEffect.isFireBall;
       const isFireBlast = this.punchEffect.isFireBlast;
+      const isBlackFlash = this.punchEffect.isBlackFlash;
 
-      // Fire Blast: hold full opacity for first half, then fade out in second half
-      const alpha = isFireBlast
-        ? (progress < 0.5 ? 1 : 1 - ((progress - 0.5) / 0.5))
-        : 1 - progress;
+      // Alpha: black flash holds then fades; fire blast holds half then fades; others fade linearly
+      const alpha = isBlackFlash
+        ? (progress < 0.4 ? 1 : 1 - ((progress - 0.4) / 0.6))
+        : isFireBlast
+          ? (progress < 0.5 ? 1 : 1 - ((progress - 0.5) / 0.5))
+          : 1 - progress;
 
       // Impact flash at fist tip
       const impactX = this.facingRight
@@ -764,6 +801,89 @@ class Player {
                      impactY + Math.sin(angle) * len);
           ctx.stroke();
         }
+      } else if (isBlackFlash) {
+        // Black Flash: sharp slash streaks from fist — red outlined, white core, no background
+        ctx.save();
+        ctx.lineCap = 'butt';
+
+        const fistTipX = impactX;
+        const fistTipY = impactY;
+        const baseDir = this.facingRight ? 0 : Math.PI;
+        const t = this.punchEffect.elapsed;
+
+        // Define slash lines: each is a long thin streak at a slight angle from base direction
+        // Angles are small offsets from facing direction (like speed lines / slashes)
+        const slashes = [
+          { angleOffset: -0.18, len: 90, delay: 0 },
+          { angleOffset:  0.00, len: 110, delay: 0 },
+          { angleOffset:  0.18, len: 85, delay: 0 },
+          { angleOffset: -0.32, len: 65, delay: 0.02 },
+          { angleOffset:  0.32, len: 70, delay: 0.02 },
+          { angleOffset: -0.08, len: 130, delay: 0 },   // long center streak
+          { angleOffset:  0.08, len: 120, delay: 0 },
+          { angleOffset: -0.50, len: 45, delay: 0.04 },
+          { angleOffset:  0.50, len: 48, delay: 0.04 },
+        ];
+
+        slashes.forEach(s => {
+          const localProgress = Math.max(0, progress - s.delay / this.punchEffect.duration);
+          if (localProgress <= 0) return;
+          const a = 1 - localProgress;
+          if (a <= 0) return;
+
+          const angle = baseDir + s.angleOffset;
+          const len = s.len * (1 - progress * 0.2);
+          const perpAngle = angle + Math.PI / 2;
+
+          const startX = fistTipX - Math.cos(angle) * len * 0.15;
+          const startY = fistTipY - Math.sin(angle) * len * 0.15;
+          const endX   = fistTipX + Math.cos(angle) * len * 0.85;
+          const endY   = fistTipY + Math.sin(angle) * len * 0.85;
+
+          // Draw a tapered lozenge: pointed at both ends, widest in the middle
+          const drawLozenge = (halfW) => {
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            const px = Math.cos(perpAngle) * halfW;
+            const py = Math.sin(perpAngle) * halfW;
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);           // back point
+            ctx.lineTo(midX + px, midY + py);     // top middle
+            ctx.lineTo(endX, endY);               // front point
+            ctx.lineTo(midX - px, midY - py);     // bottom middle
+            ctx.closePath();
+          };
+
+          // Black outer
+          drawLozenge(6);
+          ctx.fillStyle = `rgba(0, 0, 0, ${a * 0.95})`;
+          ctx.fill();
+
+          // Red mid
+          drawLozenge(4);
+          ctx.fillStyle = `rgba(220, 0, 0, ${a * 0.8})`;
+          ctx.fill();
+
+          // White core
+          drawLozenge(1.5);
+          ctx.fillStyle = `rgba(255, 255, 255, ${a * 0.95})`;
+          ctx.fill();
+        });
+
+        // Bright white flash at fist origin on first hit
+        if (progress < 0.25) {
+          const coreA = (1 - progress / 0.25) * alpha;
+          const grad = ctx.createRadialGradient(fistTipX, fistTipY, 0, fistTipX, fistTipY, 18);
+          grad.addColorStop(0, `rgba(255, 255, 255, ${coreA})`);
+          grad.addColorStop(0.5, `rgba(255, 100, 100, ${coreA * 0.6})`);
+          grad.addColorStop(1, `rgba(200, 0, 0, 0)`);
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(fistTipX, fistTipY, 18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
       } else {
         ctx.fillStyle = isStrong
           ? `rgba(255, 80, 0, ${alpha * 0.85})`

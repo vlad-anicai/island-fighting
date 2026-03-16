@@ -107,7 +107,16 @@
             </div>
         </div>
 
-        <!-- HUD (shown during gameplay) -->
+        <!-- Death Screen -->
+        <div id="deathScreen" class="menu death-screen">
+            <div class="death-skull">💀</div>
+            <h1 class="death-title">YOU DIED</h1>
+            <div class="death-info">
+                <span id="deathLevel">Level 1</span>
+            </div>
+            <button id="tryAgainBtn" class="menu-btn death-btn-retry">Try Again</button>
+            <button id="deathMenuBtn" class="menu-btn back-btn">Back to Menu</button>
+        </div>
         <div id="hud" class="hud">
             <div id="hudHP" class="hud-item">HP: 100</div>
             <div id="hudCoins" class="hud-item">Coins: 0</div>

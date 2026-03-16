@@ -348,6 +348,16 @@ export class StateManager {
             console.error('Failed to add ability after spending coins:', abilityType);
             return false;
         }
+
+        // Auto-assign to first free slot (z → x → c → v)
+        const slots = ['z', 'x', 'c', 'v'];
+        for (const slot of slots) {
+            if (!this.keyBindings[slot]) {
+                this.assignAbility(slot, abilityType);
+                console.log(`Auto-assigned ${abilityType} to slot ${slot.toUpperCase()}`);
+                break;
+            }
+        }
         
         return true;
     }
