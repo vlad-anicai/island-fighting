@@ -40,6 +40,15 @@ class Projectile {
       this.explosionElapsed = 0;
       this.explosionDuration = 0.5;
       this.lifetime = 4.0;
+    } else if (type === 'FROSTBITE') {
+      this.width = 18;
+      this.height = 18;
+      this.lifetime = 3.0;
+    } else if (type === 'MAGMA_ROCK') {
+      this.width = 22;
+      this.height = 22;
+      this.gravity = 0.25;
+      this.lifetime = 3.0;
     }
   }
 
@@ -61,8 +70,7 @@ class Projectile {
     }
 
     if (this.type === 'BOMB') {
-      if (this.exploded) {
-        // Animate explosion, then deactivate
+      if (this.exploded) {        // Animate explosion, then deactivate
         this.explosionElapsed += deltaTime;
         if (this.explosionElapsed >= this.explosionDuration) {
           this.active = false;
@@ -70,6 +78,10 @@ class Projectile {
         return; // don't move while exploding
       }
       // Apply gravity so it arcs
+      this.velocityY += this.gravity;
+    }
+
+    if (this.type === 'MAGMA_ROCK') {
       this.velocityY += this.gravity;
     }
 
@@ -95,6 +107,10 @@ class Projectile {
       this.renderPlasmaLaser(ctx);
     } else if (this.type === 'BOMB') {
       this.renderBomb(ctx);
+    } else if (this.type === 'FROSTBITE') {
+      this.renderFrostbite(ctx);
+    } else if (this.type === 'MAGMA_ROCK') {
+      this.renderMagmaRock(ctx);
     }
   }
   
@@ -155,8 +171,103 @@ class Projectile {
       ctx.fillRect(px - 2, py - 2, 4, 4);
     }
   }
-  renderBomb(ctx) {
+  renderMagmaRock(ctx) {
     const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const t = this.elapsed;
+    const spin = t * 4;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(spin);
+
+    // Rocky outer shape (irregular polygon)
+    ctx.fillStyle = '#5a2200';
+    ctx.beginPath();
+    const pts = 8;
+    for (let i = 0; i < pts; i++) {
+      const angle = (i / pts) * Math.PI * 2;
+      const r = 10 + Math.sin(i * 2.3) * 3;
+      i === 0 ? ctx.moveTo(Math.cos(angle)*r, Math.sin(angle)*r)
+              : ctx.lineTo(Math.cos(angle)*r, Math.sin(angle)*r);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Glowing lava cracks
+    const crackGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 9);
+    crackGrad.addColorStop(0, `rgba(255, 220, 50, 0.95)`);
+    crackGrad.addColorStop(0.4, `rgba(255, 80, 0, 0.8)`);
+    crackGrad.addColorStop(1, `rgba(150, 20, 0, 0)`);
+    ctx.fillStyle = crackGrad;
+    ctx.beginPath();
+    ctx.arc(0, 0, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ember sparks trailing behind
+    ctx.restore();
+    const trailAngle = Math.atan2(-this.velocityY, -this.velocityX);
+    for (let i = 1; i <= 4; i++) {
+      const tx = cx + Math.cos(trailAngle) * i * 6;
+      const ty = cy + Math.sin(trailAngle) * i * 6;
+      const ta = 0.7 * (1 - i / 5);
+      ctx.fillStyle = `rgba(255, ${Math.floor(120 - i*20)}, 0, ${ta})`;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 4 - i * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  renderFrostbite(ctx) {
+    const cx = this.x + this.width / 2;
+    const cy = this.y + this.height / 2;
+    const pulse = Math.sin(this.elapsed * 18) * 0.2 + 1;
+    const r = 9 * pulse;
+
+    // Outer icy glow
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r + 8);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+    grad.addColorStop(0.3, 'rgba(100, 210, 255, 0.8)');
+    grad.addColorStop(0.7, 'rgba(0, 120, 220, 0.4)');
+    grad.addColorStop(1, 'rgba(0, 60, 180, 0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ice crystal spikes (6-pointed)
+    ctx.strokeStyle = 'rgba(200, 240, 255, 0.9)';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2 + this.elapsed * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(angle) * r * 1.4, cy + Math.sin(angle) * r * 1.4);
+      ctx.stroke();
+      // Side branches
+      const bAngle1 = angle + 0.4;
+      const bAngle2 = angle - 0.4;
+      const bLen = r * 0.6;
+      const bx = cx + Math.cos(angle) * r * 0.7;
+      const by = cy + Math.sin(angle) * r * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(bAngle1) * bLen, by + Math.sin(bAngle1) * bLen);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(bAngle2) * bLen, by + Math.sin(bAngle2) * bLen);
+      ctx.stroke();
+    }
+
+    // Core
+    ctx.fillStyle = 'rgba(220, 245, 255, 0.95)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  renderBomb(ctx) {    const cx = this.x + this.width / 2;
     const cy = this.y + this.height / 2;
 
     if (this.exploded) {

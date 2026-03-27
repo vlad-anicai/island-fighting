@@ -40,6 +40,12 @@ export class GameEngine {
         // No-cooldown cheat end time (0 = inactive)
         this.noCooldownEndTime = 0;
 
+        // Island theme: 1 = normal, 2 = neon night, 3 = hellfire, 4 = space
+        this.islandTheme = parseInt(localStorage.getItem('islandTheme') || '1', 10);
+
+        // Magma puddles
+        this.magmaPuddles = [];
+
         // Mobile controls state
         this.mobileEnabled = false;
         // Thunder targeting state (desktop: wait for click)
@@ -80,6 +86,17 @@ export class GameEngine {
         // Main menu buttons
         document.getElementById('playBtn').addEventListener('click', () => {
             this.startGameplay();
+        });
+
+        document.getElementById('nextIslandBtn').addEventListener('click', () => {
+            if (this.islandTheme >= 4) return;
+            const requirements = { 1: 'TORNADO', 2: 'MAGMA_ROCK', 3: 'FLY' };
+            const req = requirements[this.islandTheme];
+            if (req && !this.stateManager.hasAbility(req)) return;
+            this.stateManager.resetForNextIsland();
+            this.islandTheme++;
+            localStorage.setItem('islandTheme', this.islandTheme);
+            this.startGameplay(1);
         });
         
         document.getElementById('shopBtn').addEventListener('click', () => {
@@ -239,6 +256,24 @@ export class GameEngine {
             case 'main':
                 this.mainMenu.classList.add('active');
                 this.scene = 'menu';
+                // Update Next Island button state
+                const nextBtn = document.getElementById('nextIslandBtn');
+                if (this.islandTheme >= 4) {
+                    nextBtn.disabled = true;
+                    nextBtn.style.opacity = '0.4';
+                    nextBtn.style.cursor = 'not-allowed';
+                    nextBtn.textContent = 'Final Island Reached';
+                    nextBtn.title = 'You are on the final island';
+                } else {
+                    const requirements = { 1: 'TORNADO', 2: 'MAGMA_ROCK', 3: 'FLY' };
+                    const req = requirements[this.islandTheme];
+                    const hasReq = req ? this.stateManager.hasAbility(req) : true;
+                    nextBtn.disabled = !hasReq;
+                    nextBtn.style.opacity = hasReq ? '1' : '0.4';
+                    nextBtn.style.cursor = hasReq ? 'pointer' : 'not-allowed';
+                    nextBtn.textContent = `Go to Next Island (${this.islandTheme + 1}/4)`;
+                    nextBtn.title = hasReq ? '' : `Requires ${req ? req.replace('_', ' ') : ''} ability`;
+                }
                 break;
             case 'shop':
                 this.abilityShop.classList.add('active');
@@ -296,12 +331,18 @@ export class GameEngine {
             { type: 'EARTHQUAKE', name: 'Earthquake', cost: 850, description: 'Stuns all enemies for 3s' },
             { type: 'BOMB', name: 'Bomb', cost: 900, description: 'Thrown grenade that arcs and explodes in a large radius' },
             { type: 'TORNADO', name: 'Tornado', cost: 1000, description: 'Area damage attack' },
-            { type: 'THUNDER', name: 'Thunder Strike', cost: 1200, description: 'Lightning bolt at mouse position' },
-            { type: 'CONTROLLED_FIRE_BALL', name: 'Controlled Fire Ball', cost: 1500, description: 'Homing fireball that follows your cursor' },
-            { type: 'FLY', name: 'Fly', cost: 1800, description: 'Fly freely with W/S for 8 seconds' },
-            { type: 'SLOW_MOTION', name: 'Slow Motion', cost: 2000, description: 'Slows all enemies for 5 seconds' },
-            { type: 'PLASMA_LASER', name: 'Plasma Laser', cost: 1600, description: 'Fast piercing beam that passes through all enemies' },
-            { type: 'BLACK_FLASH', name: 'Black Flash', cost: 1300, description: 'Super punch with black sparks — massive damage' }
+            { type: 'JUMP_BOOTS', name: 'Jump Boots', cost: 800, description: 'Boost jump height for 10 seconds', unlocksAt: 4 },
+            { type: 'IRON_GLOVES', name: 'Iron Gloves', cost: 900, description: 'Double punch and strong punch damage for 10 seconds', unlocksAt: 4 },
+            { type: 'FROSTBITE', name: 'Frostbite', cost: 1000, description: 'Icy projectile that slows the first enemy hit', unlocksAt: 2 },
+            { type: 'MAGMA_ROCK', name: 'Magma Rock', cost: 1100, description: 'Projectile that leaves a burning magma puddle on hit', unlocksAt: 2 },
+            { type: 'THUNDER', name: 'Thunder Strike', cost: 1200, description: 'Lightning bolt at mouse position', unlocksAt: 3 },
+            { type: 'CONTROLLED_FIRE_BALL', name: 'Controlled Fire Ball', cost: 1500, description: 'Homing fireball that follows your cursor', unlocksAt: 3 },
+            { type: 'FLY', name: 'Fly', cost: 1800, description: 'Fly freely with W/S for 8 seconds', unlocksAt: 3 },
+            { type: 'THRUSTER_HANDS', name: 'Thruster Hands', cost: 1600, description: 'Launch forward at high speed, damaging all in your path', unlocksAt: 4 },
+            { type: 'REACTOR_EXPLOSION', name: 'Reactor Explosion', cost: 2200, description: 'Detonate your electronic chestplate in a massive explosion around you', unlocksAt: 4 },
+            { type: 'SLOW_MOTION', name: 'Slow Motion', cost: 2000, description: 'Slows all enemies for 5 seconds', unlocksAt: 4 },
+            { type: 'PLASMA_LASER', name: 'Plasma Laser', cost: 2500, description: 'Fast piercing beam that passes through all enemies', unlocksAt: 4 },
+            { type: 'BLACK_FLASH', name: 'Black Flash', cost: 2750, description: 'Super punch with black sparks — massive damage', unlocksAt: 4 }
         ];
         
         // Get ability list container
@@ -313,28 +354,39 @@ export class GameEngine {
         
         // Create ability items
         abilities.forEach(ability => {
+            // Locked if ability has an unlocksAt island higher than current
+            const locked = this.islandTheme < 4 && ability.unlocksAt && ability.unlocksAt > this.islandTheme;
+
             const isOwned = this.stateManager.hasAbility(ability.type);
             const canAfford = this.stateManager.getCoins() >= ability.cost;
-            
+
             const abilityItem = document.createElement('div');
-            abilityItem.className = `ability-item ${isOwned ? 'owned' : ''}`;
-            
+            abilityItem.className = `ability-item ${isOwned ? 'owned' : ''} ${locked ? 'locked' : ''}`;
+            if (locked) abilityItem.style.opacity = '0.4';
+
+            const lockDesc = ability.unlocksAt ? `🔒 Unlocks on Island ${ability.unlocksAt}` : '🔒 Locked';
             const abilityInfo = document.createElement('div');
             abilityInfo.innerHTML = `
-                <div class="ability-name">${ability.name}</div>
-                <div class="ability-description">${ability.description}</div>
+                <div class="ability-name">${locked ? '🔒 ' : ''}${ability.name}</div>
+                <div class="ability-description">${locked ? lockDesc : ability.description}</div>
             `;
-            
+
             const abilityRight = document.createElement('div');
             abilityRight.style.display = 'flex';
             abilityRight.style.alignItems = 'center';
             abilityRight.style.gap = '10px';
-            
+
             const costSpan = document.createElement('span');
             costSpan.className = 'ability-cost';
             costSpan.textContent = `${ability.cost} coins`;
-            
-            if (isOwned) {
+
+            if (locked) {
+                const lockedSpan = document.createElement('span');
+                lockedSpan.style.color = '#888';
+                lockedSpan.style.fontWeight = 'bold';
+                lockedSpan.textContent = 'LOCKED';
+                abilityRight.appendChild(lockedSpan);
+            } else if (isOwned) {
                 const ownedSpan = document.createElement('span');
                 ownedSpan.style.color = '#4CAF50';
                 ownedSpan.style.fontWeight = 'bold';
@@ -350,22 +402,21 @@ export class GameEngine {
                 buyBtn.disabled = !canAfford;
                 buyBtn.style.opacity = canAfford ? '1' : '0.5';
                 buyBtn.style.cursor = canAfford ? 'pointer' : 'not-allowed';
-                
+
                 buyBtn.addEventListener('click', () => {
                     if (this.stateManager.purchaseAbility(ability.type, ability.cost)) {
                         console.log(`Purchased ${ability.name}!`);
-                        // Sync player abilities with updated bindings
                         if (this.player) {
                             this.player.abilities = { ...this.stateManager.getKeyBindings() };
                         }
-                        this.updateAbilityShop(); // Refresh display
+                        this.updateAbilityShop();
                     }
                 });
-                
+
                 abilityRight.appendChild(costSpan);
                 abilityRight.appendChild(buyBtn);
             }
-            
+
             abilityItem.appendChild(abilityInfo);
             abilityItem.appendChild(abilityRight);
             abilityList.appendChild(abilityItem);
@@ -398,7 +449,13 @@ export class GameEngine {
             'SLOW_MOTION': 'Slow Motion',
             'PLASMA_LASER': 'Plasma Laser',
             'BOMB': 'Bomb',
-            'BLACK_FLASH': 'Black Flash'
+            'BLACK_FLASH': 'Black Flash',
+            'FROSTBITE': 'Frostbite',
+            'MAGMA_ROCK': 'Magma Rock',
+            'THRUSTER_HANDS': 'Thruster Hands',
+            'REACTOR_EXPLOSION': 'Reactor Explosion',
+            'JUMP_BOOTS': 'Jump Boots',
+            'IRON_GLOVES': 'Iron Gloves'
         };
         
         keys.forEach(key => {
@@ -571,11 +628,11 @@ export class GameEngine {
      */
     resetProgress() {
         this.stateManager.resetAll();
-        // Reload the page to reinitialize everything cleanly
+        localStorage.removeItem('islandTheme');
         window.location.reload();
     }
     
-    startGameplay() {
+    startGameplay(startLevel = 1) {
         console.log('Starting gameplay...');
         
         // Hide all menus
@@ -595,8 +652,8 @@ export class GameEngine {
         // Set scene to gameplay
         this.scene = 'gameplay';
         
-        // Initialize first level
-        this.initializeLevel(1);
+        // Initialize level
+        this.initializeLevel(startLevel);
     }
     
     /**
@@ -612,14 +669,19 @@ export class GameEngine {
         // Clear existing entities
         this.bots = [];
         this.projectiles = [];
+        this.magmaPuddles = [];
 
         // Set up waves: more waves per level as levels increase
-        this.totalWaves = Math.min(2 + Math.floor(this.level / 3), 8);
+        const baseWaves = Math.min(2 + Math.floor(this.level / 3), 8);
+        this.totalWaves = this.islandTheme === 4 ? Math.min(baseWaves + 4, 12)
+                        : this.islandTheme === 3 ? Math.min(baseWaves + 3, 11)
+                        : this.islandTheme === 2 ? Math.min(baseWaves + 2, 10)
+                        : baseWaves;
         this.currentWave = 1;
         this.waveAnnouncement = null;
         
         // Create island instance for this level
-        this.island = new Island(this.level);
+        this.island = new Island(this.level, this.islandTheme);
         
         // Create player instance at center of island
         const centerX = this.island.x + this.island.width / 2 - 16; // 16 = half of player width (32)
@@ -630,6 +692,10 @@ export class GameEngine {
         const maxHP = this.stateManager.getMaxHP();
         this.player.maxHp = maxHP;
         this.player.hp = maxHP;
+
+        // Island damage multipliers: 1=1x, 2=1.5x, 3=2x, 4=2.5x
+        const dmgMults = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5 };
+        this.player.damageMultiplier = dmgMults[this.islandTheme] || 1.0;
         
         // Load player abilities from state
         const bindings = this.stateManager.getKeyBindings();
@@ -644,7 +710,11 @@ export class GameEngine {
      */
     spawnBots() {
         // Wave sizing: each wave has more bots than the last
-        const botsThisWave = Math.min(2 + this.currentWave + Math.floor(this.level / 2), 15);
+        const baseCount = Math.min(2 + this.currentWave + Math.floor(this.level / 2), 15);
+        const botsThisWave = this.islandTheme === 4 ? Math.min(baseCount + 6, 22)
+                           : this.islandTheme === 3 ? Math.min(baseCount + 4, 20)
+                           : this.islandTheme === 2 ? Math.min(baseCount + 3, 18)
+                           : baseCount;
         
         for (let i = 0; i < botsThisWave; i++) {
             // 5 spawn points: off-screen left/right + top-left/center/right above screen
@@ -656,7 +726,23 @@ export class GameEngine {
                 { x: this.canvas.width - 50,    y: -50 },                  // top-right
             ];
             const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
-            this.bots.push(new Bot(sp.x, sp.y, this.level));
+            const bot = new Bot(sp.x, sp.y, this.level);
+            bot.islandTheme = this.islandTheme;
+            // Island difficulty scaling (no speed increase — only HP and damage)
+            if (this.islandTheme === 2) {
+                bot.hp = Math.floor(bot.hp * 1.8);
+                bot.maxHp = bot.hp;
+                bot.contactDamage = Math.floor(bot.contactDamage * 1.5);
+            } else if (this.islandTheme === 3) {
+                bot.hp = Math.floor(bot.hp * 2.5);
+                bot.maxHp = bot.hp;
+                bot.contactDamage = Math.floor(bot.contactDamage * 2.0);
+            } else if (this.islandTheme === 4) {
+                bot.hp = Math.floor(bot.hp * 3.5);
+                bot.maxHp = bot.hp;
+                bot.contactDamage = Math.floor(bot.contactDamage * 2.5);
+            }
+            this.bots.push(bot);
         }
         
         // Show wave announcement
@@ -756,7 +842,24 @@ export class GameEngine {
         if (this.player && this.island) {
             this.player.update(deltaTime, this.inputHandler, this.island);
             
-            // Handle punch attack (or confirm thunder targeting on desktop)
+            // Thruster Hands: damage bots player passes through during dash
+            if (this.player.dashing && this._thrusterDamage) {
+                for (let i = this.bots.length - 1; i >= 0; i--) {
+                    const bot = this.bots[i];
+                    if (this.player.dashHitBots.has(i)) continue;
+                    if (this.checkCollision(this.player, bot)) {
+                        this.player.dashHitBots.add(i);
+                        const defeated = bot.takeDamage(this.playerDmg(this._thrusterDamage));
+                        const kbDir = bot.x + bot.width / 2 > this.player.x + this.player.width / 2 ? 1 : -1;
+                        bot.applyKnockback(kbDir * 15, -8);
+                        if (defeated) {
+                            this.stateManager.addCoins(bot.coinReward);
+                            this.bots.splice(i, 1);
+                        }
+                    }
+                }
+            }
+            if (!this.player.dashing) this._thrusterDamage = null;
             if (this.inputHandler.consumeMouseClick()) {
                 if (this.thunderTargeting) {
                     // Fire thunder at clicked position
@@ -774,7 +877,7 @@ export class GameEngine {
                         for (let i = this.bots.length - 1; i >= 0; i--) {
                             const bot = this.bots[i];
                             if (Math.abs((bot.x + bot.width / 2) - tx) <= r) {
-                                const defeated = bot.takeDamage(result.damage);
+                                const defeated = bot.takeDamage(this.playerDmg(result.damage));
                                 if (defeated) {
                                     this.stateManager.addCoins(bot.coinReward);
                                     this.bots.splice(i, 1);
@@ -790,7 +893,7 @@ export class GameEngine {
                         for (let i = this.bots.length - 1; i >= 0; i--) {
                             const bot = this.bots[i];
                             if (this.checkCollision(punchHitbox, bot)) {
-                                const defeated = bot.takeDamage(punchHitbox.damage);
+                                const defeated = bot.takeDamage(this.playerDmg(punchHitbox.damage));
                                 // Knockback bot away from player
                                 const kbDir = bot.x + bot.width / 2 > this.player.x + this.player.width / 2 ? 1 : -1;
                                 bot.applyKnockback(kbDir * 8, -4);
@@ -831,7 +934,7 @@ export class GameEngine {
                             for (let i = this.bots.length - 1; i >= 0; i--) {
                                 const bot = this.bots[i];
                                 if (this.checkCollision(result.hitbox, bot)) {
-                                    const defeated = bot.takeDamage(result.hitbox.damage);
+                                    const defeated = bot.takeDamage(this.playerDmg(result.hitbox.damage));
                                     const kbDir = bot.x + bot.width / 2 > this.player.x + this.player.width / 2 ? 1 : -1;
                                     bot.applyKnockback(kbDir * 12, -6);
                                     // Black Flash hit effect on bot
@@ -856,14 +959,41 @@ export class GameEngine {
                                 'player'
                             );
                             this.projectiles.push(proj);
+                        } else if (result.type === 'THRUSTER_HANDS') {
+                            // Store damage for per-frame collision during dash
+                            this._thrusterDamage = result.damage;
                         } else if (result.type === 'EARTHQUAKE') {
                             // Earthquake - stun all bots
                             for (const bot of this.bots) {
-                                bot.stun(result.stunDuration);
-                            }
+                                bot.stun(result.stunDuration);                            }
                         } else if (result.type === 'SLOW_MOTION') {
                             this.timeScale = 0.2;
                             this.slowMotionEndTime = Date.now() + result.duration;
+                        } else if (result.type === 'REACTOR_EXPLOSION') {
+                            // Damage all bots within explosion radius
+                            const ex = this.player.x + this.player.width / 2;
+                            const ey = this.player.y + this.player.height / 2;
+                            for (let i = this.bots.length - 1; i >= 0; i--) {
+                                const bot = this.bots[i];
+                                const bx = bot.x + bot.width / 2;
+                                const by = bot.y + bot.height / 2;
+                                const dist = Math.sqrt((bx - ex) ** 2 + (by - ey) ** 2);
+                                if (dist <= result.radius) {
+                                    const defeated = bot.takeDamage(this.playerDmg(result.damage));
+                                    const kbDir = bx > ex ? 1 : -1;
+                                    bot.applyKnockback(kbDir * 18, -10);
+                                    if (defeated) {
+                                        this.stateManager.addCoins(bot.coinReward);
+                                        this.bots.splice(i, 1);
+                                    }
+                                }
+                            }
+                            // Store explosion effect for rendering
+                            this.reactorExplosionEffect = {
+                                x: ex, y: ey,
+                                radius: result.radius,
+                                elapsed: 0, duration: 0.6
+                            };
                         } else if (result.type === 'THUNDER') {
                             // Thunder - damage all bots within radius of target
                             const tx = result.x, ty = result.y, r = result.radius;
@@ -872,7 +1002,7 @@ export class GameEngine {
                                 const bx = bot.x + bot.width / 2;
                                 const by = bot.y + bot.height / 2;
                                 if (Math.abs(bx - tx) <= r) {
-                                    const defeated = bot.takeDamage(result.damage);
+                                    const defeated = bot.takeDamage(this.playerDmg(result.damage));
                                     if (defeated) {
                                         this.stateManager.addCoins(bot.coinReward);
                                         this.bots.splice(i, 1);
@@ -964,6 +1094,14 @@ export class GameEngine {
             }
         }
 
+        // Update reactor explosion effect
+        if (this.reactorExplosionEffect) {
+            this.reactorExplosionEffect.elapsed += deltaTime;
+            if (this.reactorExplosionEffect.elapsed >= this.reactorExplosionEffect.duration) {
+                this.reactorExplosionEffect = null;
+            }
+        }
+
         // Update wave announcement timer
         if (this.waveAnnouncement) {
             this.waveAnnouncement.elapsed += deltaTime;
@@ -1003,7 +1141,7 @@ export class GameEngine {
                         const by = bot.y + bot.height / 2;
                         const dist = Math.sqrt((bx - cx) ** 2 + (by - cy) ** 2);
                         if (dist <= proj.explosionRadius) {
-                            const defeated = bot.takeDamage(proj.damage);
+                            const defeated = bot.takeDamage(this.playerDmg(proj.damage));
                             // Knockback away from explosion center
                             const kbDir = bx > cx ? 1 : -1;
                             bot.applyKnockback(kbDir * 10, -8);
@@ -1048,7 +1186,7 @@ export class GameEngine {
                         if (proj.hitBots.has(j)) continue;
                         proj.hitBots.add(j);
                     }
-                    const defeated = bot.takeDamage(proj.damage);
+                    const defeated = bot.takeDamage(this.playerDmg(proj.damage));
                     if (defeated) {
                         this.stateManager.addCoins(bot.coinReward);
                         this.bots.splice(j, 1);
@@ -1059,10 +1197,84 @@ export class GameEngine {
                     if (proj.type === 'FIRE_BALL') {
                         proj.active = false;
                     }
+                    // Frostbite stops on first hit and slows the bot for 3 seconds
+                    if (proj.type === 'FROSTBITE') {
+                        bot.slow(3000, 0.3);
+                        proj.active = false;
+                    }
+                    // Magma Rock stops on hit and spawns a magma puddle
+                    if (proj.type === 'MAGMA_ROCK') {
+                        this.magmaPuddles.push({
+                            x: bot.x + bot.width / 2,
+                            y: bot.y + bot.height,
+                            radius: 55,
+                            duration: 10,
+                            elapsed: 0,
+                            burnTimer: 0
+                        });
+                        proj.active = false;
+                    }
                 }
             }
         }
         
+        // Update magma puddles
+        for (let i = this.magmaPuddles.length - 1; i >= 0; i--) {
+            const puddle = this.magmaPuddles[i];
+            puddle.elapsed += deltaTime;
+            if (puddle.elapsed >= puddle.duration) {
+                this.magmaPuddles.splice(i, 1);
+                continue;
+            }
+            // Apply burn to bots standing in the puddle every 1 second
+            puddle.burnTimer = (puddle.burnTimer || 0) + deltaTime;
+            if (puddle.burnTimer >= 1.0) {
+                puddle.burnTimer -= 1.0;
+                for (let j = this.bots.length - 1; j >= 0; j--) {
+                    const bot = this.bots[j];
+                    const bx = bot.x + bot.width / 2;
+                    const by = bot.y + bot.height;
+                    const dx = bx - puddle.x;
+                    const dy = by - puddle.y;
+                    if (Math.sqrt(dx*dx + dy*dy) <= puddle.radius) {
+                        // Frostbite + Burn reaction: lose half HP, cancel both effects
+                        if (bot.slowed) {
+                            bot.hp = Math.max(1, Math.floor(bot.hp / 2));
+                            bot.slowed = false;
+                            bot.burning = false;
+                            // Steam burst visual
+                            bot.steamEffect = { elapsed: 0, duration: 0.6 };
+                        } else {
+                            // Apply burn status (5s)
+                            bot.burning = true;
+                            bot.burnEndTime = Date.now() + 5000;
+                            bot.burnTickTimer = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update bot burn damage (1 dmg/sec for 5 seconds)
+        for (let i = this.bots.length - 1; i >= 0; i--) {
+            const bot = this.bots[i];
+            if (bot.burning) {
+                if (Date.now() >= bot.burnEndTime) {
+                    bot.burning = false;
+                } else {
+                    bot.burnTickTimer = (bot.burnTickTimer || 0) + deltaTime;
+                    if (bot.burnTickTimer >= 1.0) {
+                        bot.burnTickTimer -= 1.0;
+                        const defeated = bot.takeDamage(8);
+                        if (defeated) {
+                            this.stateManager.addCoins(bot.coinReward);
+                            this.bots.splice(i, 1);
+                        }
+                    }
+                }
+            }
+        }
+
         // Check wave / level completion
         if (this.bots.length === 0) {
             if (this.currentWave < this.totalWaves) {
@@ -1078,6 +1290,13 @@ export class GameEngine {
     }
     
     /**
+     * Apply player damage multiplier
+     */
+    playerDmg(base) {
+        return Math.floor(base * (this.player ? this.player.damageMultiplier || 1.0 : 1.0));
+    }
+
+    /**
      * Simple AABB collision detection
      */
     checkCollision(a, b) {
@@ -1090,8 +1309,26 @@ export class GameEngine {
     renderGameplay() {
         // Clear canvas with sky background
         const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        gradient.addColorStop(0, '#87CEEB');
-        gradient.addColorStop(1, '#E0F6FF');
+        if (this.islandTheme === 2) {
+            // Half-frozen half-volcanic: stormy grey-purple
+            gradient.addColorStop(0, '#2d1b4e');
+            gradient.addColorStop(0.5, '#4a2060');
+            gradient.addColorStop(1, '#1a0a0a');
+        } else if (this.islandTheme === 3) {
+            // Tropical beach: warm blue sky
+            gradient.addColorStop(0, '#0288D1');
+            gradient.addColorStop(0.6, '#29B6F6');
+            gradient.addColorStop(1, '#B3E5FC');
+        } else if (this.islandTheme === 4) {
+            // Futuristic night city
+            gradient.addColorStop(0, '#000005');
+            gradient.addColorStop(0.6, '#0a0a1a');
+            gradient.addColorStop(1, '#0d1b2a');
+        } else {
+            // Island 1: grassy ruins — bright day sky
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#E0F6FF');
+        }
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
@@ -1105,12 +1342,42 @@ export class GameEngine {
             this.player.render(this.ctx);
         }
         
+        // Render magma puddles (under bots)
+        for (const puddle of this.magmaPuddles) {
+            this.renderMagmaPuddle(puddle);
+        }
+
         // Render bots
         for (const bot of this.bots) {
             bot.render(this.ctx);
             // Black Flash hit effect
             if (bot.blackFlashEffect) {
                 this.renderBlackFlashHit(bot);
+            }
+            // Steam burst (frostbite + burn reaction)
+            if (bot.steamEffect) {
+                bot.steamEffect.elapsed += (1/60);
+                const sp = bot.steamEffect.elapsed / bot.steamEffect.duration;
+                if (sp >= 1) {
+                    bot.steamEffect = null;
+                } else {
+                    const sa = 1 - sp;
+                    const cx = bot.x + bot.width / 2;
+                    const cy = bot.y + bot.height / 2;
+                    const sr = 40 * sp;
+                    const grad = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, sr);
+                    grad.addColorStop(0, `rgba(255,255,255,${sa * 0.9})`);
+                    grad.addColorStop(0.5, `rgba(200,230,255,${sa * 0.6})`);
+                    grad.addColorStop(1, `rgba(150,200,255,0)`);
+                    this.ctx.fillStyle = grad;
+                    this.ctx.beginPath();
+                    this.ctx.arc(cx, cy, sr, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    this.ctx.fillStyle = `rgba(255,255,255,${sa * 0.7})`;
+                    this.ctx.font = `bold 28px Courier New`;
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText('COMBO!', cx, cy - sr - 4);
+                }
             }
         }
         
@@ -1122,6 +1389,11 @@ export class GameEngine {
         // Render thunder effect
         if (this.thunderEffect) {
             this.renderThunder(this.thunderEffect);
+        }
+
+        // Render reactor explosion effect
+        if (this.reactorExplosionEffect) {
+            this.renderReactorExplosion(this.reactorExplosionEffect);
         }
 
         // Wave announcement banner
@@ -1238,7 +1510,13 @@ export class GameEngine {
             'SLOW_MOTION': 'SlowMo',
             'PLASMA_LASER': 'Plasma',
             'BOMB': 'Bomb',
-            'BLACK_FLASH': 'B.Flash'
+            'BLACK_FLASH': 'B.Flash',
+            'FROSTBITE': 'Frost',
+            'MAGMA_ROCK': 'Magma',
+            'THRUSTER_HANDS': 'Thrust',
+            'REACTOR_EXPLOSION': 'Reactor',
+            'JUMP_BOOTS': 'J.Boot',
+            'IRON_GLOVES': 'I.Glove'
         };
         const abilityColors = {
             'STRONG_PUNCH': '#FF0000',
@@ -1253,7 +1531,13 @@ export class GameEngine {
             'SLOW_MOTION': '#AAAACC',
             'PLASMA_LASER': '#00FFEE',
             'BOMB': '#888800',
-            'BLACK_FLASH': '#330000'
+            'BLACK_FLASH': '#330000',
+            'FROSTBITE': '#00AAFF',
+            'MAGMA_ROCK': '#FF4400',
+            'THRUSTER_HANDS': '#FF6D00',
+            'REACTOR_EXPLOSION': '#00FFAA',
+            'JUMP_BOOTS': '#FFDD00',
+            'IRON_GLOVES': '#99BBCC'
         };
 
         if (this.mobileEnabled) {
@@ -1345,6 +1629,62 @@ export class GameEngine {
         });
     }
     
+    /**
+     * Renders a magma puddle on the ground
+     */
+    renderMagmaPuddle(puddle) {
+        const ctx = this.ctx;
+        const remaining = 1 - puddle.elapsed / puddle.duration;
+        const alpha = Math.min(1, remaining * 3); // fade out last third
+        const t = puddle.elapsed;
+        const r = puddle.radius;
+
+        ctx.save();
+
+        // Outer dark crust
+        ctx.fillStyle = `rgba(80, 20, 0, ${alpha * 0.7})`;
+        ctx.beginPath();
+        ctx.ellipse(puddle.x, puddle.y, r, r * 0.35, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glowing lava core
+        const lavaGrad = ctx.createRadialGradient(puddle.x, puddle.y, 0, puddle.x, puddle.y, r * 0.75);
+        lavaGrad.addColorStop(0, `rgba(255, 240, 50, ${alpha * 0.95})`);
+        lavaGrad.addColorStop(0.3, `rgba(255, 120, 0, ${alpha * 0.9})`);
+        lavaGrad.addColorStop(0.7, `rgba(200, 40, 0, ${alpha * 0.7})`);
+        lavaGrad.addColorStop(1, `rgba(80, 10, 0, 0)`);
+        ctx.fillStyle = lavaGrad;
+        ctx.beginPath();
+        ctx.ellipse(puddle.x, puddle.y, r * 0.85, r * 0.28, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bubbling blobs
+        for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2 + t * 1.5;
+            const dist = r * 0.4 * (0.5 + Math.sin(t * 3 + i) * 0.3);
+            const bx = puddle.x + Math.cos(angle) * dist;
+            const by = puddle.y + Math.sin(angle) * dist * 0.35;
+            const br = 4 + Math.sin(t * 4 + i * 1.3) * 2;
+            ctx.fillStyle = `rgba(255, ${100 + Math.floor(Math.sin(t*3+i)*60)}, 0, ${alpha * 0.9})`;
+            ctx.beginPath();
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Rising heat particles
+        for (let i = 0; i < 3; i++) {
+            const px = puddle.x + Math.sin(t * 2 + i * 2.1) * r * 0.4;
+            const py = puddle.y - ((t * 30 + i * 20) % 40);
+            const pa = alpha * (1 - ((t * 30 + i * 20) % 40) / 40) * 0.5;
+            ctx.fillStyle = `rgba(255, 80, 0, ${pa})`;
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
     /**
      * Renders Black Flash hit effect around a bot
      */
@@ -1489,6 +1829,59 @@ export class GameEngine {
     }
 
     /**
+     * Renders the reactor explosion visual effect
+     */
+    renderReactorExplosion(effect) {
+        const ctx = this.ctx;
+        const progress = effect.elapsed / effect.duration;
+        const alpha = progress < 0.2 ? progress / 0.2 : 1 - ((progress - 0.2) / 0.8);
+        const { x, y, radius } = effect;
+        const expandedR = radius * (0.3 + progress * 0.7);
+
+        ctx.save();
+
+        // Outer shockwave ring
+        ctx.strokeStyle = `rgba(0, 255, 170, ${alpha * 0.6})`;
+        ctx.lineWidth = 6 * (1 - progress);
+        ctx.beginPath();
+        ctx.arc(x, y, expandedR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Mid electric ring
+        ctx.strokeStyle = `rgba(100, 220, 255, ${alpha * 0.8})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, expandedR * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Core radial gradient
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, expandedR);
+        grad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.9})`);
+        grad.addColorStop(0.2, `rgba(0, 255, 170, ${alpha * 0.7})`);
+        grad.addColorStop(0.6, `rgba(0, 100, 255, ${alpha * 0.3})`);
+        grad.addColorStop(1, `rgba(0, 0, 100, 0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, expandedR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Electric sparks radiating outward
+        const sparkCount = 12;
+        for (let i = 0; i < sparkCount; i++) {
+            const angle = (i / sparkCount) * Math.PI * 2 + progress * 2;
+            const len = expandedR * (0.5 + Math.sin(i * 3.7 + progress * 10) * 0.3);
+            ctx.strokeStyle = `rgba(180, 255, 220, ${alpha})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + Math.cos(angle) * expandedR * 0.2, y + Math.sin(angle) * expandedR * 0.2);
+            ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+
+    /**
      * Get max cooldown for an ability type
      */
     getAbilityMaxCooldown(abilityType) {
@@ -1505,7 +1898,13 @@ export class GameEngine {
             'SLOW_MOTION': 25.0,
             'PLASMA_LASER': 15.0,
             'BOMB': 12.0,
-            'BLACK_FLASH': 8.0
+            'BLACK_FLASH': 8.0,
+            'FROSTBITE': 10.0,
+            'MAGMA_ROCK': 14.0,
+            'THRUSTER_HANDS': 12.0,
+            'REACTOR_EXPLOSION': 20.0,
+            'JUMP_BOOTS': 30.0,
+            'IRON_GLOVES': 30.0
         };
         return cooldowns[abilityType] || 1.0;
     }

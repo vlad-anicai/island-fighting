@@ -446,6 +446,28 @@ export class StateManager {
         
         console.log('All progress reset');
     }
+
+    /**
+     * Reset progress for next island — lose abilities/HP upgrades, keep coins × 1.2
+     */
+    resetForNextIsland() {
+        const boostedCoins = Math.floor(this.coins * 1.2);
+        this.ownedAbilities = [...this.DEFAULT_ABILITIES];
+        this.keyBindings = { ...this.DEFAULT_BINDINGS };
+        this.hpUpgrades = this.DEFAULT_HP_UPGRADES;
+        this.coins = boostedCoins;
+
+        try {
+            localStorage.removeItem(this.STORAGE_KEYS.ABILITIES);
+            localStorage.removeItem(this.STORAGE_KEYS.BINDINGS);
+            localStorage.removeItem(this.STORAGE_KEYS.HP_UPGRADES);
+            this.saveCoins();
+        } catch (error) {
+            console.error('Error resetting for next island:', error);
+        }
+
+        console.log(`Next island: reset progress, coins boosted to ${boostedCoins}`);
+    }
     
     /**
      * Calculate HP upgrade cost based on current upgrades

@@ -48,7 +48,19 @@ class Player {
 
     // Block mechanic
     this.blocking = false;
-    this.blockMeter = 100;
+
+    // Thruster Hands dash state
+    this.dashing = false;
+    this.dashEndTime = 0;
+    this.dashHitBots = new Set();
+
+    // Jump Boots state
+    this.jumpBootsActive = false;
+    this.jumpBootsEndTime = 0;
+
+    // Iron Gloves state
+    this.ironGlovesActive = false;
+    this.ironGlovesEndTime = 0;    this.blockMeter = 100;
     this.maxBlockMeter = 100;
     this.blockDrainRate = 25;   // meter drained per second while holding block
     this.blockRegenRate = 15;   // meter regained per second when not blocking
@@ -77,7 +89,9 @@ class Player {
    */
   update(deltaTime, input, island) {
     // Handle horizontal movement (A/D keys)
-    if (input.isKeyPressed('a')) {
+    if (this.dashing) {
+      // Maintain dash velocity — don't apply friction or override with movement input
+    } else if (input.isKeyPressed('a')) {
       this.velocityX = -this.moveSpeed;
       this.facingRight = false;
     } else if (input.isKeyPressed('d')) {
@@ -95,7 +109,7 @@ class Player {
     
     // Handle jumping (Space key)
     if (input.isKeyPressed('space') && this.isGrounded) {
-      this.velocityY = this.jumpStrength;
+      this.velocityY = this.jumpBootsActive ? this.jumpStrength * 1.7 : this.jumpStrength;
       this.isGrounded = false;
     }
 
@@ -144,9 +158,24 @@ class Player {
       this.velocityX = 0;
     }
     
+    // Check dash expiry
+    if (this.dashing && Date.now() >= this.dashEndTime) {
+      this.dashing = false;
+      this.dashHitBots = new Set();
+    }
+
+    // Check jump boots expiry
+    if (this.jumpBootsActive && Date.now() >= this.jumpBootsEndTime) {
+      this.jumpBootsActive = false;
+    }
+
+    // Check iron gloves expiry
+    if (this.ironGlovesActive && Date.now() >= this.ironGlovesEndTime) {
+      this.ironGlovesActive = false;
+    }
+
     // Handle block (F key)
-    const wantsBlock = input.isKeyPressed('f');
-    if (wantsBlock && !this.blockBroken && this.blockMeter > 0) {
+    const wantsBlock = input.isKeyPressed('f');    if (wantsBlock && !this.blockBroken && this.blockMeter > 0) {
       this.blocking = true;
       this.blockMeter -= this.blockDrainRate * deltaTime;
       if (this.blockMeter <= 0) {
@@ -207,6 +236,10 @@ class Player {
       return; // Shield blocks all damage
     }
 
+    if (this.dashing) {
+      return; // Invincible during Thruster Hands dash
+    }
+
     if (this.blocking && this.blockMeter > 0) {
       // Block absorbs the hit — drain meter proportional to damage
       this.blockMeter = Math.max(0, this.blockMeter - amount * 0.5);
@@ -239,7 +272,7 @@ class Player {
       y: this.y,
       width: punchRange,
       height: this.height,
-      damage: 10
+      damage: this.ironGlovesActive ? 20 : 10
     };
     
     // Store punch effect data for rendering
@@ -342,6 +375,36 @@ class Player {
         result = this.activateBlackFlash();
         this.abilityCooldowns[key] = 8.0;
         break;
+
+      case 'FROSTBITE':
+        result = this.activateFrostbite();
+        this.abilityCooldowns[key] = 10.0;
+        break;
+
+      case 'MAGMA_ROCK':
+        result = this.activateMagmaRock();
+        this.abilityCooldowns[key] = 14.0;
+        break;
+
+      case 'THRUSTER_HANDS':
+        result = this.activateThrusterHands();
+        this.abilityCooldowns[key] = 12.0;
+        break;
+
+      case 'REACTOR_EXPLOSION':
+        result = this.activateReactorExplosion();
+        this.abilityCooldowns[key] = 20.0;
+        break;
+
+      case 'JUMP_BOOTS':
+        result = this.activateJumpBoots();
+        this.abilityCooldowns[key] = 30.0;
+        break;
+
+      case 'IRON_GLOVES':
+        result = this.activateIronGloves();
+        this.abilityCooldowns[key] = 30.0;
+        break;
     }
     
     return result;
@@ -357,7 +420,7 @@ class Player {
       y: this.y,
       width: punchRange,
       height: this.height,
-      damage: 30
+      damage: this.ironGlovesActive ? 60 : 30
     };
     
     // Create visual effect
@@ -455,6 +518,80 @@ class Player {
     this.flyEndTime = Date.now() + 8000; // 8 seconds
     this.velocityY = -3; // initial lift
     return { type: 'FLY' };
+  }
+
+  /**
+   * Activates Thruster Hands — launches player forward, damaging all in path
+   */
+  activateThrusterHands() {
+    const speed = this.facingRight ? 22 : -22;
+    this.velocityX = speed;
+    this.velocityY = -4; // slight upward arc
+    this.dashing = true;
+    this.dashEndTime = Date.now() + 1200; // 1.2 seconds (doubled)
+    this.dashHitBots = new Set(); // track already-hit bots
+    return { type: 'THRUSTER_HANDS', damage: 45 };
+  }
+
+  /**
+   * Activates Reactor Explosion — detonates the electronic chestplate in an AoE burst
+   */
+  activateReactorExplosion() {
+    return { type: 'REACTOR_EXPLOSION', damage: 130, radius: 160 };
+  }
+
+  /**
+   * Activates Jump Boots — boosts jump height for 10 seconds
+   */
+  activateJumpBoots() {
+    this.jumpBootsActive = true;
+    this.jumpBootsEndTime = Date.now() + 10000;
+    return { type: 'JUMP_BOOTS' };
+  }
+
+  /**
+   * Activates Iron Gloves — doubles punch and strong punch damage for 10 seconds
+   */
+  activateIronGloves() {
+    this.ironGlovesActive = true;
+    this.ironGlovesEndTime = Date.now() + 10000;
+    return { type: 'IRON_GLOVES' };
+  }
+
+  /**
+   * Activates Magma Rock — slow projectile that leaves a burning puddle on hit
+   */
+  activateMagmaRock() {
+    const speed = this.facingRight ? 6 : -6;
+    return {
+      type: 'MAGMA_ROCK',
+      projectile: {
+        type: 'MAGMA_ROCK',
+        x: this.facingRight ? this.x + this.width : this.x - 20,
+        y: this.y + this.height / 2 - 10,
+        velocityX: speed,
+        velocityY: -3,
+        damage: 25
+      }
+    };
+  }
+
+  /**
+   * Activates Frostbite — icy projectile that slows the first enemy hit
+   */
+  activateFrostbite() {
+    const speed = 9;
+    return {
+      type: 'FROSTBITE',
+      projectile: {
+        type: 'FROSTBITE',
+        x: this.facingRight ? this.x + this.width : this.x - 18,
+        y: this.y + this.height / 2 - 9,
+        velocityX: this.facingRight ? speed : -speed,
+        velocityY: 0,
+        damage: 10
+      }
+    };
   }
 
   /**
@@ -632,6 +769,31 @@ class Player {
     ctx.fillStyle = shirtColor;
     ctx.fillRect(torsoX, torsoY, torsoW, torsoH);
 
+    // --- ELECTRONIC CHESTPLATE (shown when REACTOR_EXPLOSION is equipped) ---
+    const hasReactor = Object.values(this.abilities).includes('REACTOR_EXPLOSION');
+    if (hasReactor) {
+      const time = Date.now() / 1000;
+      const pulse = Math.sin(time * 4) * 0.3 + 0.7;
+      // Plate body
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(torsoX - 1, torsoY, torsoW + 2, torsoH);
+      // Glowing reactor core (center circle)
+      const coreX = cx;
+      const coreY = torsoY + torsoH / 2;
+      const coreGrad = ctx.createRadialGradient(coreX, coreY, 0, coreX, coreY, 4);
+      coreGrad.addColorStop(0, `rgba(255, 255, 255, ${pulse})`);
+      coreGrad.addColorStop(0.4, `rgba(0, 255, 170, ${pulse * 0.9})`);
+      coreGrad.addColorStop(1, `rgba(0, 100, 255, 0)`);
+      ctx.fillStyle = coreGrad;
+      ctx.beginPath();
+      ctx.arc(coreX, coreY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // Plate edge highlight
+      ctx.strokeStyle = `rgba(0, 255, 170, ${pulse * 0.8})`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(torsoX - 1, torsoY, torsoW + 2, torsoH);
+    }
+
     // --- LEGS (pants) ---
     const legY = torsoY + torsoH;
     const legH = 14;
@@ -645,6 +807,30 @@ class Player {
     ctx.fillStyle = shoeColor;
     ctx.fillRect(cx - 7, legY + legH - 3, 6, 3);
     ctx.fillRect(cx,     legY + legH - 3, 6, 3);
+
+    // --- JUMP BOOTS (shown when JUMP_BOOTS is active) ---
+    if (this.jumpBootsActive) {
+      const time = Date.now() / 1000;
+      const pulse = Math.sin(time * 6) * 0.3 + 0.7;
+      // Boot body
+      ctx.fillStyle = '#222244';
+      ctx.fillRect(cx - 8, legY + legH - 5, 7, 5);
+      ctx.fillRect(cx - 1, legY + legH - 5, 7, 5);
+      // Yellow energy stripe
+      ctx.fillStyle = `rgba(255, 220, 0, ${pulse})`;
+      ctx.fillRect(cx - 8, legY + legH - 3, 7, 1);
+      ctx.fillRect(cx - 1, legY + legH - 3, 7, 1);
+      // Glow under boots
+      ctx.fillStyle = `rgba(255, 220, 0, ${pulse * 0.3})`;
+      ctx.fillRect(cx - 9, legY + legH, 8, 2);
+      ctx.fillRect(cx - 1, legY + legH, 8, 2);
+      // Timer bar above head
+      const remaining = Math.max(0, (this.jumpBootsEndTime - Date.now()) / 10000);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(headX - 2, headY - 14, headW + 4, 4);
+      ctx.fillStyle = `rgba(255, 220, 0, 0.9)`;
+      ctx.fillRect(headX - 2, headY - 14, (headW + 4) * remaining, 4);
+    }
 
     // --- ARMS ---
     // Resting arm position: hanging at sides, elbow bent slightly
@@ -677,9 +863,34 @@ class Player {
         : this.punchEffect && this.punchEffect.isFireBlast ? '#FF2200'
         : this.punchEffect && this.punchEffect.isFireBall ? '#FF6600'
         : this.punchEffect && this.punchEffect.isStrong ? '#FF4400' : '#FFD700')
-      : skinColor;
+      : (this.ironGlovesActive ? '#8899AA' : skinColor);
     ctx.fillStyle = fistColor;
     ctx.fillRect(frontArmX, armY + frontArmH, armW + 1, 4);
+
+    // --- IRON GLOVES visual (metal overlay on both fists when active) ---
+    if (this.ironGlovesActive) {
+      const time = Date.now() / 1000;
+      const pulse = Math.sin(time * 5) * 0.2 + 0.8;
+      // Metal glove on back hand
+      ctx.fillStyle = '#778899';
+      ctx.fillRect(backArmX - 1, armY + armH - 1, armW + 2, 5);
+      ctx.fillStyle = `rgba(180, 210, 230, ${pulse})`;
+      ctx.fillRect(backArmX, armY + armH, armW, 1);
+      // Metal glove on front hand (idle position only — punch anim overrides color above)
+      if (punchProgress <= 0.1) {
+        ctx.fillStyle = '#778899';
+        ctx.fillRect(frontArmX - 1, armY + frontArmH - 1, armW + 2, 5);
+        ctx.fillStyle = `rgba(180, 210, 230, ${pulse})`;
+        ctx.fillRect(frontArmX, armY + frontArmH, armW, 1);
+      }
+      // Timer bar
+      const remaining = Math.max(0, (this.ironGlovesEndTime - Date.now()) / 10000);
+      const barOffset = this.jumpBootsActive ? -20 : -14;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(headX - 2, headY + barOffset, headW + 4, 4);
+      ctx.fillStyle = `rgba(140, 180, 210, 0.9)`;
+      ctx.fillRect(headX - 2, headY + barOffset, (headW + 4) * remaining, 4);
+    }
 
     // --- PUNCH IMPACT EFFECT ---
     if (this.punchEffect && this.punchEffect.active) {
@@ -942,6 +1153,37 @@ class Player {
       ctx.fillRect(headX - 2, headY - 8, headW + 4, 4);
       ctx.fillStyle = `rgba(100, 200, 255, 0.9)`;
       ctx.fillRect(headX - 2, headY - 8, (headW + 4) * remaining, 4);
+    }
+
+    // --- THRUSTER HANDS DASH EFFECT ---
+    if (this.dashing) {
+      const trailDir = this.facingRight ? -1 : 1;
+      const time = Date.now() / 80;
+      for (let i = 1; i <= 6; i++) {
+        const tx = cx + trailDir * i * 12;
+        const ty = by + this.height / 2 + Math.sin(time + i) * 4;
+        const ta = 0.8 * (1 - i / 7);
+        const r = (8 - i) * 1.2;
+        // Outer orange
+        ctx.fillStyle = `rgba(255, ${Math.floor(120 - i * 15)}, 0, ${ta * 0.7})`;
+        ctx.beginPath();
+        ctx.arc(tx, ty, r + 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Cyan core
+        ctx.fillStyle = `rgba(0, 229, 255, ${ta})`;
+        ctx.beginPath();
+        ctx.arc(tx, ty, r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Glow on hands
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.8)';
+      ctx.beginPath();
+      ctx.arc(frontArmX + (this.facingRight ? armW : 0), armY + frontArmH, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 150, 0, 0.6)';
+      ctx.beginPath();
+      ctx.arc(frontArmX + (this.facingRight ? armW : 0), armY + frontArmH, 12, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // --- BLOCK METER ---

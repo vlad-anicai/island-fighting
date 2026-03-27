@@ -371,6 +371,16 @@ body {
     background: #BDBDBD;
 }
 
+/* Next Island Button */
+.next-island-btn {
+    background: linear-gradient(135deg, #1a6b2a, #2e9e45);
+    border-color: #4CAF50;
+}
+
+.next-island-btn:hover {
+    background: linear-gradient(135deg, #2e9e45, #3dbd57);
+}
+
 /* Secret Code Button */
 .secret-code-btn {
     position: absolute;
